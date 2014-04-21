@@ -27,11 +27,11 @@ with open('top_'+str(N)+'_results.csv', 'w') as f:
         f.write('\n')
 
     # Report words which were already in the taxonomy
-    with open('taxonomy', 'r') as f:
-        taxonomy = pickle.load(f)
+    with open('taxonomy', 'r') as f2:
+        taxonomy = pickle.load(f2)
     for j, label in enumerate(labelset):
         for i in range(N):
             ith = sort[j+1][i]
             for concept in taxonomy:
                 if vocas[ith] in taxonomy[concept]:
-                    print '*',label, '||', vocas[ith]
+                    print '*', label, '||', vocas[ith]

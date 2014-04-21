@@ -50,7 +50,7 @@ def process_kpex_output(fname):
 def replace_synonyms(synonyms, text):
     """ assume text is already lowercase, synonyms is a dict"""
     for syn in synonyms:
-        text = text.replace(' '+syn+' ', ' '+synonyms[syn]+' ')
+        text = text.replace(' ' + syn + ' ', ' ' + synonyms[syn] + ' ')
     return text
 
 
@@ -86,7 +86,7 @@ def make_taxonomic_ngrams(taxonomy, report):
     if type(taxonomy) is dict:
         for cluster in taxonomy:
             ngram_matches = [concept for concept in taxonomy[cluster] if
-                concept.replace('_', ' ') in report]
+                             concept.replace('_', ' ') in report]
             for ngram in ngram_matches:
                 unigrams = ngram.replace('_', ' ')
                 report_ngram = report_ngram.replace(unigrams, ngram)
@@ -101,7 +101,7 @@ def make_taxonomic_ngrams(taxonomy, report):
     return report_ngram
 
 
-def prepare_enb_corpus2(fname, synonyms, frequencies, taxonomy):
+def prepare_enb_corpus(fname, synonyms, frequencies, taxonomy):
     """ Sanitizes and formats ENB corpus as a list of documents. Each document
     is represented as a list of word tokens, all lowercase. Stop words are
     removed. Concept n-grams are denoted by chaining using underscores, e.g.,
@@ -135,41 +135,7 @@ def prepare_enb_corpus2(fname, synonyms, frequencies, taxonomy):
     return corpus
 
 
-def prepare_enb_corpus(fname):
-    """ Sanitizes and formats ENB corpus as a list of documents. Each document
-    is represented as a list of word tokens, all lowercase. Stop words are
-    removed. Concept n-grams are denoted by chaining using underscores, e.g.,
-    "sea level rise" => "sea_level_rise"
-
-    Input arguments:
-    fname -- filepath to ENB corpus
-
-    Output arguments:
-    corpus -- list of lists contain word tokens for each report
-    """
-    stop = stopwords.words('english')
-    corpus = []
-    # Clean and format corpus
-    with open(fname) as f:
-        data = csv.reader(f, delimiter='\t')
-        reports = [row[7] for row in data]  # Index 7 is report text
-        for report in reports:
-            report = report.lower()
-            report = make_taxonomic_ngrams(report)
-            doc = []
-            for sent in sent_tokenize(report):
-                doc += [word for word in word_tokenize(sent)
-                        if word not in stop]
-            corpus.append([x for x in doc if x[0] in string.ascii_letters])
-
-    # Serialize prepared corpus and save to file
-    with open('enb_corpus', 'w') as f:
-        pickle.dump(corpus, f)
-        print 'Wrote prepared corpus to \'enb_corpus\''
-    return corpus
-
-
-def prepare_taxonomy(fname):
+def prepare_taxonomy(fname, cluster=True):
     """ Prepare a taxonomy file contained a list of concepts (strings) which
     have been pickled.
 
@@ -180,26 +146,7 @@ def prepare_taxonomy(fname):
     Output:
     taxonomy -- list of taxonomic concepts as strings, normalized and sanitized
     """
-
-    # Normalize and sanitize taxonomy.
-    with open(fname) as f:
-        taxonomy = f.readlines()
-    taxonomy = [word.rstrip() for word in taxonomy]
-    taxonomy = [word.lower() for word in taxonomy]
-    taxonomy = [re.sub(' ', '_', word) for word in taxonomy]
-
-    # Remove duplicates (previously caused problems with L-LDA code).
-    taxonomy = list(set(taxonomy))
-
-    # Serialize taxonomy and save to file.
-    with open('enb_taxonomy', 'w') as f:
-        pickle.dump(taxonomy, f)
-        print 'Wrote prepared taxonomy to \'enb_taxonomy\''
-    return taxonomy
-
-
-def prepare_taxonomy2(fname, cluster=True):
-    with open(fname, 'r',) as f:
+    with open(fname, 'r', ) as f:
         data = csv.reader(f, delimiter='\t')
         rows = [row for row in data]
     terms = [row[1].lower().replace(' ', '_') for row in rows]
@@ -222,7 +169,22 @@ def prepare_taxonomy2(fname, cluster=True):
     return taxonomy
 
 
-def create_labelset2(taxonomy, frequencies, corpus, threshold=60, mode='count'):
+def create_labelset(taxonomy, frequencies, corpus, threshold=60,
+                    mode='count'):
+    """ Create list of frequently occurring concepts in the corpus to be used
+    as labels.
+
+    Input arguments:
+    taxonomy -- taxonomy data as produced by prepare_taxonomy()
+    corpus -- corpus data s produced by prepare_corpus()
+    threshold -- cut-off for inclusion in label set for L-LDA
+    mode -- options:
+            'count' (default) -- threshold by # of occurrences
+            'freq' -- threshold by proportional frequency, 0.0 to 1.0
+
+    Output arguments:
+    labelset -- list of strings, representing concept-labels for L-LDA
+    """
     # Filter by count or frequency
     labelset = []
     fd = FreqDist(reduce(list.__add__, corpus))
@@ -259,7 +221,7 @@ def create_labelset2(taxonomy, frequencies, corpus, threshold=60, mode='count'):
                 print concept, ': #', occurrences
                 if occurrences > threshold:
                     labelset.append(concept)
-        elif mode is ' freq' :
+        elif mode is ' freq':
             for concept in taxonomy:
                 # FIXME: doesn't  do frequency yet for KPEX
                 concept_freq = fd.freq(concept)
@@ -275,7 +237,19 @@ def create_labelset2(taxonomy, frequencies, corpus, threshold=60, mode='count'):
     return labelset
 
 
-def assign_labels2(labelset, taxonomy, corpus):
+def assign_labels(labelset, taxonomy, corpus):
+    """ Given a label set and a corpus of documents, assign to each document
+    the labels according to the presence of the concept-label within the
+    document text.
+
+    Inputs:
+    labelset -- set of labels as produced by create_labelset()
+    corpus -- corpus data as produced by prepare_corpus()
+
+    Outputs:
+    labels -- list of lists, each sub-list contains the labels (or empty list)
+                for each document in the corpus
+    """
     labels = []
     for document in corpus:
         document_labels = []
@@ -297,57 +271,6 @@ def assign_labels2(labelset, taxonomy, corpus):
     return labels
 
 
-def create_labelset(taxonomy, corpus, threshold, mode='count'):
-    """ Create list of frequently occurring concepts in the corpus to be used
-    as labels.
-
-    Input arguments:
-    taxonomy -- taxonomy data as produced by prepare_taxonomy()
-    corpus -- corpus data s produced by prepare_corpus()
-    threshold -- cut-off for inclusion in label set for L-LDA
-    mode -- options:
-            'count' (default) -- threshold by # of occurrences
-            'freq' -- threshold by proportional frequency, 0.0 to 1.0
-
-    Output arguments:
-    labelset -- list of strings, representing concept-labels for L-LDA
-    """
-
-    # Filter by count or frequency
-    labelset = []
-    fd = FreqDist(reduce(list.__add__, corpus))
-    for concept in taxonomy:
-        if (mode is 'count') and (fd[concept] > threshold):
-            labelset.append(concept)
-        elif (mode is 'freq') and (fd.freq(concept) > threshold):
-            labelset.append(concept)
-
-    # Serialize and save label set to file
-    with open('labelset', 'w') as f:
-        pickle.dump(labelset, f)
-        print 'Wrote created labelset to \'labelset\''
-    return labelset
-
-
-def assign_labels(labelset, corpus):
-    """ Given a label set and a corpus of documents, assign to each document
-    the labels according to the presence of the concept-label within the
-    document text.
-
-    Inputs:
-    labelset -- set of labels as produced by create_labelset()
-    corpus -- corpus data as produced by prepare_corpus()
-
-    Outputs:
-    labels -- list of lists, each sub-list contains the labels (or empty list)
-                for each document in the corpus
-    """
-    labels = []
-    for document in corpus:
-        labels.append([label for label in labelset if label in document])
-    return labels
-
-
 def run_llda(labelset, corpus, labels):
     """" Performs L-LDA given a label set, a corpus, and the assigned labels
     from that label set for the documents in that corpus. Currently, L-LDA
@@ -364,19 +287,26 @@ def run_llda(labelset, corpus, labels):
 
     # Set up LLDA parameters and run
     parser = OptionParser()
-    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.001)
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.001)
-    parser.add_option("-k", dest="K", type="int", help="number of topics", default=50)
-    parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=20)
-    parser.add_option("-s", dest="seed", type="int", help="random seed", default=None)
-    parser.add_option("-n", dest="samplesize", type="int", help="dataset sample size", default=100)
+    parser.add_option("--alpha", dest="alpha", type="float",
+                      help="parameter alpha", default=0.001)
+    parser.add_option("--beta", dest="beta", type="float",
+                      help="parameter beta", default=0.001)
+    parser.add_option("-k", dest="K", type="int", help="number of topics",
+                      default=50)
+    parser.add_option("-i", dest="iteration", type="int",
+                      help="iteration count", default=20)
+    parser.add_option("-s", dest="seed", type="int", help="random seed",
+                      default=None)
+    parser.add_option("-n", dest="samplesize", type="int",
+                      help="dataset sample size", default=100)
     (options, args) = parser.parse_args()
 
     llda = LLDA(options.K, options.alpha, options.beta)
     llda.set_corpus(labelset, corpus, labels)
 
     # Show progress
-    print "M=%d, V=%d, L=%d, K=%d" % (len(corpus), len(llda.vocas), len(labelset), options.K)
+    print "M=%d, V=%d, L=%d, K=%d" % (len(corpus), len(llda.vocas),
+                                      len(labelset), options.K)
 
     for i in range(options.iteration):
         sys.stderr.write("-- %d : %.4f\n" % (i, llda.perplexity()))
@@ -386,13 +316,13 @@ def run_llda(labelset, corpus, labels):
         phi = llda.phi()
         with open('phi', 'w') as f:
             pickle.dump(phi, f)
-        # with open('vocas', 'w') as f:
+            # with open('vocas', 'w') as f:
             # pickle.dump(llda.vocas, f)
         with open('top_20_words.txt', 'w') as f:
             for k, label in enumerate(labelset):
                 f.write('\n\n-- label ' + str(k) + ' : ' + label)
                 for w in numpy.argsort(-phi[k])[:20]:
-                    f.write('\n' + llda.vocas[w] + ': ' + str(phi[k,w]))
+                    f.write('\n' + llda.vocas[w] + ': ' + str(phi[k, w]))
     print "perplexity : %.4f" % llda.perplexity()
 
     # Final reporting and saving of L-LDA results
@@ -408,56 +338,21 @@ def run_llda(labelset, corpus, labels):
             print "\n-- label %d : %s" % (k, label)
             f.write('\n\n-- label ' + str(k) + ' : ' + label)
             for w in numpy.argsort(-phi[k])[:20]:
-                print "%s: %.4f" % (llda.vocas[w], phi[k,w])
-                f.write('\n' + llda.vocas[w] + ': ' + str(phi[k,w]))
+                print "%s: %.4f" % (llda.vocas[w], phi[k, w])
+                f.write('\n' + llda.vocas[w] + ': ' + str(phi[k, w]))
 
 
-def llda_v1():
-    # Create data if not already done
-    corpus = prepare_enb_corpus('../ENB/ENB_Reports.csv')
-    taxonomy = prepare_taxonomy('../ENB/enb_expression_clusters.txt')
-    labelset = create_labelset(taxonomy, corpus, 50)
-    labels = assign_labels(labelset, corpus)
-
-    # Run LLDA with default options
-    run_llda(labelset, corpus, labels)
-
-def llda_v2():
-    # Try LLDA with clusters instead of all concept terms, and time
-    start = time.time()
-    taxonomy = prepare_taxonomy2('../ENB/ENB_Issue_Dictionaries.csv')
-    corpus = prepare_enb_corpus('../ENB/ENB_Reports.csv')
-    labelset = create_labelset2(taxonomy, corpus, 100)
-    labels = assign_labels2(labelset, taxonomy, corpus)
-    run_llda(labelset, corpus, labels)
-    end = time.time()
-    with open('llda_time.txt', 'w') as f:
-        f.write(str(end-start) + ' secs')
-
-
-def llda_v3():
-    # LLDA with clusters and KPEX n-grams
-    enb_corpus_file = '../enb/ENB_Reports.csv'
-    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-    kpex_output_file = 'enb_corpus_kpex.kpex_n9999.txt'
-    frequencies, synonyms = process_kpex_output(kpex_output_file)
-    taxonomy = prepare_taxonomy2(taxonomy_file)
-    corpus = prepare_enb_corpus2(enb_corpus_file, synonyms, frequencies,
-                                 taxonomy)
-    labelset = create_labelset2(taxonomy, frequencies, corpus, 60)
-    labels = assign_labels2(labelset, taxonomy, corpus)
-
-def llda_v4():
+def llda_v0():
     # LLDA with 200+ concepts and KPEX n-grams
     enb_corpus_file = '../enb/ENB_Reports.csv'
     taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
     kpex_output_file = 'enb_corpus_kpex.kpex_n9999.txt'
     frequencies, synonyms = process_kpex_output(kpex_output_file)
-    taxonomy = prepare_taxonomy2(taxonomy_file, cluster=False)
-    corpus = prepare_enb_corpus2(enb_corpus_file, synonyms, frequencies,
-                                 taxonomy)
-    labelset = create_labelset2(taxonomy, frequencies, corpus, 10)
-    labels = assign_labels2(labelset, taxonomy, corpus)
+    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    corpus = prepare_enb_corpus(enb_corpus_file, synonyms, frequencies,
+                                taxonomy)
+    labelset = create_labelset(taxonomy, frequencies, corpus, 10)
+    labels = assign_labels(labelset, taxonomy, corpus)
 
 
 def main():
