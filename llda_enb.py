@@ -100,7 +100,19 @@ def make_taxonomic_ngrams(taxonomy, report):
         warnings.warn('Invalid taxonomy data type.')
     return report_ngram
 
+
 def prepare_enb_corpus2(fname, synonyms, frequencies, taxonomy):
+    """ Sanitizes and formats ENB corpus as a list of documents. Each document
+    is represented as a list of word tokens, all lowercase. Stop words are
+    removed. Concept n-grams are denoted by chaining using underscores, e.g.,
+    "sea level rise" => "sea_level_rise"
+
+    Input arguments:
+    fname -- filepath to ENB corpus
+
+    Output arguments:
+    corpus -- list of lists contain word tokens for each report
+    """
     stop = stopwords.words('english')
     corpus = []
     # Get ENB reports
@@ -117,7 +129,11 @@ def prepare_enb_corpus2(fname, synonyms, frequencies, taxonomy):
         for sent in sent_tokenize(report):
             doc += [word for word in word_tokenize(sent) if word not in stop]
         corpus.append([x for x in doc if x[0] in string.ascii_letters])
+    with open('enb_corpus', 'w') as f:
+        pickle.dump(corpus, f)
+        print 'Wrote prepared corpus to \'enb_corpus\''
     return corpus
+
 
 def prepare_enb_corpus(fname):
     """ Sanitizes and formats ENB corpus as a list of documents. Each document
@@ -182,21 +198,24 @@ def prepare_taxonomy(fname):
     return taxonomy
 
 
-def prepare_taxonomy2(fname):
+def prepare_taxonomy2(fname, cluster=True):
     with open(fname, 'r',) as f:
         data = csv.reader(f, delimiter='\t')
-        rows  = [row for row in data]
+        rows = [row for row in data]
     terms = [row[1].lower().replace(' ', '_') for row in rows]
     concepts = [row[2].lower().replace(' ', '_') for row in rows]
     terms.remove('label')
     concepts.remove('clustername')
 
-    taxonomy = {}
-    for term, concept in zip(terms, concepts):
-        if concept in taxonomy:
-            taxonomy[concept].append(term)
-        else:
-            taxonomy[concept] = [term]
+    if cluster:
+        taxonomy = {}
+        for term, concept in zip(terms, concepts):
+            if concept in taxonomy:
+                taxonomy[concept].append(term)
+            else:
+                taxonomy[concept] = [term]
+    else:
+        taxonomy = terms
     with open('taxonomy', 'w') as f:
         pickle.dump(taxonomy, f)
         print 'Wrote prepared taxonomy to \'taxonomy\''
@@ -210,23 +229,46 @@ def create_labelset2(taxonomy, frequencies, corpus, threshold=60, mode='count'):
     print ''
     print 'Concept : # occurrences'
     print '-----------------------'
-    for concept in taxonomy:
+    if type(taxonomy) is dict:
+        for concept in taxonomy:
+            if mode is 'count':
+                terms_count = 0
+                for term in taxonomy[concept]:
+                    # Prefer to use KPEX frequency count rather than NLTK
+                    if term in frequencies:
+                        terms_count += frequencies[term]
+                    else:
+                        terms_count += fd[term]
+                print concept, ': #', terms_count
+                if terms_count > threshold:
+                    labelset.append(concept)
+            elif mode is 'freq':
+                # FIXME: Doesn't do frequency yet for KPEX
+                terms_freq = sum([fd.freq(term) for term in concept])
+                if terms_freq > threshold:
+                    labelset.append(concept)
+    elif type(taxonomy) is list:
         if mode is 'count':
-            terms_count = 0
-            for term in taxonomy[concept]:
+            for concept in taxonomy:
+                occurrences = 0
                 # Prefer to use KPEX frequency count rather than NLTK
-                if term in frequencies:
-                    terms_count += frequencies[term]
+                if concept in frequencies:
+                    occurrences = frequencies[concept]
                 else:
-                    terms_count += fd[term]
-            print concept, ': #', terms_count
-            if terms_count > threshold:
-                labelset.append(concept)
-        elif mode is 'freq':
-            # FIXME: Doesn't do frequency yet for KPEX
-            terms_freq = sum([fd.freq(term) for term in concept])
-            if terms_freq > threshold:
-                labelset.append(concept)
+                    occurrences = fd[concept]
+                print concept, ': #', occurrences
+                if occurrences > threshold:
+                    labelset.append(concept)
+        elif mode is ' freq' :
+            for concept in taxonomy:
+                # FIXME: doesn't  do frequency yet for KPEX
+                concept_freq = fd.freq(concept)
+                if concept_freq > threshold:
+                    labelset.append(concept)
+        else:
+            warnings.warn('Mode option is invalid.')
+    else:
+        warnings.warn('Taxonomy is not a valid data type.')
     with open('labelset', 'w') as f:
         pickle.dump(labelset, f)
         print 'Wrote created labelset to \'labelset\''
@@ -245,7 +287,7 @@ def assign_labels2(labelset, taxonomy, corpus):
                             if term in document]
                 if presence:
                     document_labels.append(label)
-            elif type(taxonomy) is tuple:
+            elif type(taxonomy) is list:
                 document_labels = [label for label in labelset
                                    if label in document]
         labels.append(document_labels)
@@ -403,6 +445,18 @@ def llda_v3():
     corpus = prepare_enb_corpus2(enb_corpus_file, synonyms, frequencies,
                                  taxonomy)
     labelset = create_labelset2(taxonomy, frequencies, corpus, 60)
+    labels = assign_labels2(labelset, taxonomy, corpus)
+
+def llda_v4():
+    # LLDA with 200+ concepts and KPEX n-grams
+    enb_corpus_file = '../enb/ENB_Reports.csv'
+    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+    kpex_output_file = 'enb_corpus_kpex.kpex_n9999.txt'
+    frequencies, synonyms = process_kpex_output(kpex_output_file)
+    taxonomy = prepare_taxonomy2(taxonomy_file, cluster=False)
+    corpus = prepare_enb_corpus2(enb_corpus_file, synonyms, frequencies,
+                                 taxonomy)
+    labelset = create_labelset2(taxonomy, frequencies, corpus, 10)
     labels = assign_labels2(labelset, taxonomy, corpus)
 
 
