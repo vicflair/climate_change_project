@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 #
 # Labeled LDA using the earth negotiations bulletin (ENB) as dataset
-# Based on code written by Nakatani Shuyo
+# Processing and pipeline code written by Victor Ma, but uses LLDA code
+# written by Nakatani Shuyo
 #
 # @author: Victor Ma
 # Date: 14 Apr 2014
@@ -21,13 +22,14 @@ from nltk.corpus import stopwords
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.probability import FreqDist
 
+# For testing purposes, always display warning
 warnings.simplefilter('always')
 
 
-def process_kpex_output(fname):
+def process_kpex_concepts(kpex_concepts_file, kpex_variants_file, taxonomy):
     synonyms = {}
     frequencies = {}
-    with open(fname, 'r') as f:
+    with open(kpex_concepts_file, 'r') as f:
         data = f.readlines()
     for line in [x.lower() for x in data]:
         regexp = re.compile('([^:]*)::syn::([\w]*),f ([\d]*)')
@@ -44,13 +46,81 @@ def process_kpex_output(fname):
             synonym = ''
             frequency = no_syn.group(3)
         frequencies[concept] = int(frequency)
+
+    add_kpex_variants(kpex_variants_file, synonyms, taxonomy)
     return frequencies, synonyms
 
 
+def add_kpex_variants(fname, synonyms, taxonomy):
+    """ Updates synonyms rules (dict type) which transforms keys, i.e.,
+    synonyms, to their main forms using the KPEX term variants.
+
+    Inputs:
+    fname - filepath of the text file containing the verbose output of KPEX's
+            identification of variants
+    synonyms: dict of synonyms as keys and their transformation as dict values
+
+    Outputs:
+    synonyms - input synonyms is MUTATED so this output is just a formality
+    """
+    with open(fname, 'r') as f:
+        data = f.readlines()
+
+    # Matches variant terms in each line
+    regexp = re.compile('(?<= )[\w\- ]+(?= [\d]+\.0)')
+
+    # Add to variants (first and second forms) to synonyms dict of
+    # transformations.
+    #
+    # If the 1st form is already a left side in synonyms list, and its
+    # replacement is not the same as in the synonyms list, then add the rule
+    # "2nd form --> synonyms[1st form]" so that both the 1st and 2nd forms
+    # share the same replacement.
+    #
+    # If only the 2nd form is the left side in the synonyms list, then add
+    # the rule "1st form --> synonyms[2nd form]" so that the 1st and 2nd
+    # forms share the same replacement.
+    #
+    # If neither form is a key, i.e. left side in the list of synonym
+    # replacement rules, then add this new rule "1st form --> 2nd form" to
+    # the synonyms list.
+    for row in data:
+        variants = re.findall(regexp, row)
+        variants[0] = variants[0].lower().replace(' ', '_')
+        variants[1] = variants[1].lower().replace(' ', '_')
+        if variants[0] in synonyms:
+            if variants[1] == synonyms[variants[0]]:
+                pass
+            else:
+                synonyms[variants[1]] = synonyms[variants[0]]
+                print 'Case 1: ' + variants[1] + ' --> syn[' + \
+                    variants[0] + '] = ' + synonyms[variants[0]]
+        elif variants[1] in synonyms:
+            synonyms[variants[0]] = synonyms[variants[1]]
+            print 'Case 2: ' + variants[0] + ' --> syn[' + variants[1] + \
+                '] = ' + synonyms[variants[1]]
+        else:
+            synonyms[variants[0]] = variants[1]
+            print 'Case 3: ' + variants[0] + ' --> ' + variants[1]
+        if variants[0] in taxonomy:
+            print 'tax: ' + variants[0]
+        if variants[1] in taxonomy:
+            print 'tax: ' + variants[1]
+
+
+    # FIXME: Probably need to not only add these variants to the synonyms list,
+    # but also to the frequencies list. But maybe not, since I use FreqDist()
+    # anyway.
+    return synonyms
+
+
 def replace_synonyms(synonyms, text):
-    """ assume text is already lowercase, synonyms is a dict"""
+    """ Assume text is already lowercase WITHOUT n-grams, i.e. multi-word
+    terms with underscores, where as synonyms is a dict WITH n-grams.
+    """
     for syn in synonyms:
-        text = text.replace(' ' + syn + ' ', ' ' + synonyms[syn] + ' ')
+        text = text.replace(' ' + syn.replace('_', ' ') + ' ',
+                            ' ' + synonyms[syn].replace('_', ' ') + ' ')
     return text
 
 
@@ -120,8 +190,21 @@ def prepare_enb_corpus(fname, synonyms, frequencies, taxonomy):
         data = csv.reader(f, delimiter='\t')
         reports = [row[7].lower() for row in data]
     for report in reports:
-        # Replace synonyms with main term (according to KPEX)
+        # Replace synonyms with main term (according to KPEX) in both corpus
+        # and taxonomy (i.e. make one "standard" form)
         report = replace_synonyms(synonyms, report)
+        if type(taxonomy) is dict:
+            for concept in taxonomy:
+                for index, term in enumerate(concept):
+                    if term in synonyms:
+                        taxonomy[concept][index] = synonyms[term]
+        elif type(taxonomy) is list:
+            for index, concept in enumerate(taxonomy):
+                if concept in synonyms:
+                    taxonomy[index] = synonyms[concept]
+        else:
+            warnings.warning('Invalid data type for taxonomy.')
+
         # Chain unigrams into n-grams
         report = make_taxonomic_ngrams(taxonomy, report)
         report = make_kpex_ngrams(frequencies, report, 50)
@@ -346,9 +429,12 @@ def llda_v0():
     # LLDA with 200+ concepts and KPEX n-grams
     enb_corpus_file = '../enb/ENB_Reports.csv'
     taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-    kpex_output_file = 'enb_corpus_kpex.kpex_n9999.txt'
-    frequencies, synonyms = process_kpex_output(kpex_output_file)
+    kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+    kpex_variants_file = 'KPEX_ENB_term_variants.txt'
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+                                                  kpex_variants_file,
+                                                  taxonomy)
     corpus = prepare_enb_corpus(enb_corpus_file, synonyms, frequencies,
                                 taxonomy)
     labelset = create_labelset(taxonomy, frequencies, corpus, 10)
