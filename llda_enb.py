@@ -93,19 +93,15 @@ def add_kpex_variants(fname, synonyms, taxonomy):
                 pass
             else:
                 synonyms[variants[1]] = synonyms[variants[0]]
-                print 'Case 1: ' + variants[1] + ' --> syn[' + \
-                    variants[0] + '] = ' + synonyms[variants[0]]
+                # print 'Case 1: ' + variants[1] + ' --> syn[' + \
+                #     variants[0] + '] = ' + synonyms[variants[0]]
         elif variants[1] in synonyms:
             synonyms[variants[0]] = synonyms[variants[1]]
-            print 'Case 2: ' + variants[0] + ' --> syn[' + variants[1] + \
-                '] = ' + synonyms[variants[1]]
+            # print 'Case 2: ' + variants[0] + ' --> syn[' + variants[1] + \
+            #     '] = ' + synonyms[variants[1]]
         else:
             synonyms[variants[0]] = variants[1]
-            print 'Case 3: ' + variants[0] + ' --> ' + variants[1]
-        if variants[0] in taxonomy:
-            print 'tax: ' + variants[0]
-        if variants[1] in taxonomy:
-            print 'tax: ' + variants[1]
+            # print 'Case 3: ' + variants[0] + ' --> ' + variants[1]
 
 
     # FIXME: Probably need to not only add these variants to the synonyms list,
@@ -252,7 +248,7 @@ def prepare_taxonomy(fname, cluster=True):
     return taxonomy
 
 
-def create_labelset(taxonomy, frequencies, corpus, threshold=60,
+def create_labelset(taxonomy, frequencies, corpus, threshold=30,
                     mode='count'):
     """ Create list of frequently occurring concepts in the corpus to be used
     as labels.
@@ -317,6 +313,9 @@ def create_labelset(taxonomy, frequencies, corpus, threshold=60,
     with open('labelset', 'w') as f:
         pickle.dump(labelset, f)
         print 'Wrote created labelset to \'labelset\''
+
+    # Remove any duplicates, just in case
+    labelset = list(set(labelset))
     return labelset
 
 
@@ -377,7 +376,7 @@ def run_llda(labelset, corpus, labels):
     parser.add_option("-k", dest="K", type="int", help="number of topics",
                       default=50)
     parser.add_option("-i", dest="iteration", type="int",
-                      help="iteration count", default=20)
+                      help="iteration count", default=100)
     parser.add_option("-s", dest="seed", type="int", help="random seed",
                       default=None)
     parser.add_option("-n", dest="samplesize", type="int",
@@ -425,6 +424,88 @@ def run_llda(labelset, corpus, labels):
                 f.write('\n' + llda.vocas[w] + ': ' + str(phi[k, w]))
 
 
+def iterative_llda():
+    num_iterations = 100
+
+    # LLDA with 200+ concepts and KPEX n-grams
+    enb_corpus_file = '../enb/ENB_Reports.csv'
+    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+    kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+    kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+    extra_labels_file = 'extra_labels'
+
+    for i_iter in range(10):
+        taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+        # Enhance taxonomy with extra labels found from previous LLDA run
+        with open(extra_labels_file, 'r') as f:
+            extra_labels = pickle.load(f)
+        for label in extra_labels:
+            if label not in taxonomy:
+                taxonomy += [label]
+        frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+                                                      kpex_variants_file,
+                                                      taxonomy)
+        corpus = prepare_enb_corpus(enb_corpus_file, synonyms, frequencies,
+                                    taxonomy)
+        labelset = create_labelset(taxonomy, frequencies, corpus, 50)
+        labels = assign_labels(labelset, taxonomy, corpus)
+
+        llda = LLDA(0, 0.001, 0.001)
+        llda.set_corpus(labelset, corpus, labels)
+
+        # Show progress
+        print "M=%d, V=%d, L=%d, K=%d" % (len(corpus), len(llda.vocas),
+                                          len(labelset), len(labelset))
+
+        for i in range(num_iterations):
+            sys.stderr.write("-- %d : %.4f\n" % (i, llda.perplexity()))
+            llda.inference()
+
+            # Incrementally save results
+            phi = llda.phi()
+            with open('phi', 'w') as f:
+                pickle.dump(phi, f)
+                # with open('vocas', 'w') as f:
+                # pickle.dump(llda.vocas, f)
+            with open('top_20_words.txt', 'w') as f:
+                for k, label in enumerate(labelset):
+                    f.write('\n\n-- label ' + str(k) + ' : ' + label)
+                    for w in numpy.argsort(-phi[k])[:20]:
+                        f.write('\n' + llda.vocas[w] + ': ' + str(phi[k, w]))
+        print "perplexity : %.4f" % llda.perplexity()
+
+        # Final reporting and saving of L-LDA results
+        extra_labels = []
+        extra_phi = []
+        phi = llda.phi()
+        with open('phi' + str(i_iter), 'w') as f:
+            pickle.dump(phi, f)
+            print 'Saved LLDA results (phi) to \'phi\''
+        with open('vocas' + str(i_iter), 'w') as f:
+            pickle.dump(llda.vocas, f)
+            print 'Saved LLDA results (vocas) to \'vocas\''
+        with open('top_20_words' + str(i_iter)+'.txt', 'w') as f:
+            for k, label in enumerate(labelset):
+                print "\n-- label %d : %s" % (k, label)
+                f.write('\n\n-- label ' + str(k) + ' : ' + label)
+                for w in numpy.argsort(-phi[k])[:20]:
+                    print "%s: %.4f" % (llda.vocas[w], phi[k, w])
+                    f.write('\n' + llda.vocas[w] + ': ' + str(phi[k, w]))
+                # Extract extra labels from top N
+                n_extra_labels = 1
+                for w in numpy.argsort(-phi[k])[:n_extra_labels]:
+                    # Extract extra labels
+                    extra_labels += [llda.vocas[w]]
+                    extra_phi += [phi[k, w]]
+
+        # Saved extracted extra labels and phis
+        with open('extra_labels' + str(i_iter) + '.txt', 'w') as f:
+            for label, prob in zip(extra_labels, extra_phi):
+                f.write(label + ', ' + prob + '\n')
+        with open(extra_labels_file, 'w') as f:
+            pickle.dump(extra_labels, f)
+
+
 def llda_v0():
     # LLDA with 200+ concepts and KPEX n-grams
     enb_corpus_file = '../enb/ENB_Reports.csv'
@@ -440,9 +521,11 @@ def llda_v0():
     labelset = create_labelset(taxonomy, frequencies, corpus, 10)
     labels = assign_labels(labelset, taxonomy, corpus)
 
+    run_llda(labelset, corpus, labels)
+
 
 def main():
-    pass
+    iterative_llda()
 
 
 if __name__ == '__main__':
