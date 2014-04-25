@@ -501,7 +501,7 @@ def iterative_llda():
         # Saved extracted extra labels and phis
         with open('extra_labels' + str(i_iter) + '.txt', 'w') as f:
             for label, prob in zip(extra_labels, extra_phi):
-                f.write(label + ', ' + prob + '\n')
+                f.write(label + ', ' + str(prob) + '\n')
         with open(extra_labels_file, 'w') as f:
             pickle.dump(extra_labels, f)
 
