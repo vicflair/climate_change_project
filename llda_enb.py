@@ -316,6 +316,10 @@ def create_labelset(taxonomy, frequencies, corpus, threshold=30,
 
     # Remove any duplicates, just in case
     labelset = list(set(labelset))
+    # Remove 'common' if present, as this is a reserved label for the Shuyo
+    # implementation of L-LDA
+    if 'common' in labelset:
+            labelset.remove('common')
     return labelset
 
 
