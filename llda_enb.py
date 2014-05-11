@@ -9,18 +9,19 @@
 # Date: 14 Apr 2014
 
 import csv
-import sys
-import string
-import warnings
 import numpy
 import pickle
 import re
+import string
+import subprocess
+import sys
 import time
+import warnings
 from llda import LLDA
-from optparse import OptionParser
 from nltk.corpus import stopwords
-from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.probability import FreqDist
+from nltk.tokenize import sent_tokenize, word_tokenize
+from optparse import OptionParser
 
 
 def process_kpex_concepts(kpex_concepts_file, kpex_variants_file, taxonomy):
@@ -158,7 +159,7 @@ def make_taxonomic_ngrams(taxonomy, report):
     return report_ngram
 
 
-def prepare_enb_corpus(enb_file, synonyms, frequencies, taxonomy):
+def prepare_training_set(enb_file, synonyms, frequencies, taxonomy):
     """ Sanitizes and formats ENB corpus as a list of documents. Each document
     is represented as a list of word tokens, all lowercase. Stop words are
     removed. Concept n-grams are denoted by chaining using underscores, e.g.,
@@ -354,27 +355,8 @@ def assign_labels(labelset, taxonomy, corpus):
     return labels
 
 
-def llda(labelset, corpus, labels):
-    pass
-
-
-def iterative_llda():
-    pass
-
-
-def main():
-    enb_file = '../enb/ENB_Reports.csv'
-    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-    kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
-    kpex_variants_file = 'KPEX_ENB_term_variants.txt'
-    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
-    frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
-                                                  kpex_variants_file, taxonomy)
-    corpus = prepare_enb_corpus(enb_file, synonyms, frequencies,
-                                taxonomy)
-    labelset = create_labelset(taxonomy, frequencies, corpus)
-    labels = assign_labels(labelset, taxonomy, corpus)
-    with open('llda_training_set', 'w') as f:
+def write_training_set(corpus, labels, fname, semisupervised=False):
+    with open(fname, 'w') as f:
         for i, label in enumerate(labels):
             if label:
                 text = '\"' + ' '.join(corpus[i]) + '\"'
@@ -382,8 +364,56 @@ def main():
                 labels_str = ' '.join(label)
                 line = ','.join([str(i), labels_str, text]) + '\n'
                 f.write(line)
-    print 'wrote llda_training_set\n'
+            elif semisupervised:
+                text = '\"' + ' '.join(corpus[i]) + '\"'
+                text = text.replace('_', '')
+                labels_str = ' '.join(labelset)
+                line = ','.join([str(i), labels_str, text]) + '\n'
+                f.write(line)
+            else:
+                pass
+    print 'wrote llda training set as ' + fname + '\n'
+
+
+def llda_learn(tmt, script, training_set, output_folder):
+    # Clear existing intermediate files
+    remove_intermediate_files = ['rm', '-r', training_set + '.*']
+    print 'Remove existing intermediate files with command: '
+    print remove_intermediate_files
+    subprocess.call(remove_intermediate_files)
+    # Delete existing output folder, if applicable
+    remove_folder = ['rm', '-r', output_folder]
+    print 'Remove previously existing output folder with command: '
+    print remove_folder
+    subprocess.call(remove_folder)
+    # Run (L-)LDA script
+    command = ['java', '-jar', tmt, script, training_set, output_folder]
+    print 'Run (L-)LDA with command: '
+    print command
+    subprocess.call(command)
+
+
+def iterative_llda():
+    pass
+
+
+def main(args):
+    enb_file = '../enb/ENB_Reports.csv'
+    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+    kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+    kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+    training_file = 'llda_training_set'
+    tmt_file = 'tmt-0.4.0.jar'
+    llda_script = '6-llda-learn.scala'
+    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+                                                  kpex_variants_file, taxonomy)
+    corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+    labelset = create_labelset(taxonomy, frequencies, corpus)
+    labels = assign_labels(labelset, taxonomy, corpus)
+    write_training_set(corpus, labels, training_file, semisupervised=False)
+    llda_learn(tmt_file, llda_script, training_file, args[1])
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
