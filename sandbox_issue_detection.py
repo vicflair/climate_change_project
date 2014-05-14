@@ -118,8 +118,9 @@ print statement.format(num_co=num_joint, num_reps= total_reports)
 statement = '{0} concepts and {1} merged relations found in {2} reports.'
 print statement.format(total_concepts, total_relations, total_reports)
 
-# Check for repeated phrases
+# Check for repeated phrases, using:
 # http://stackoverflow.com/questions/4526762/repeated-phrases-in-the-text-python
+# FIXME: use instead https://github.com/raypereda/repeating-phrases
 all_enb = ' '.join(enb)
 
 
@@ -137,7 +138,7 @@ def phrases(words, length):
         if len(phrase) > length:
             phrase.remove(phrase[0])
         if len(phrase) == length:
-            yield ' '.join(phrase)
+            yield tuple(phrase)
 
 # Get counts for phrases of size 10
 #stuff = list(phrases(words(all_enb), 10))
@@ -148,15 +149,16 @@ for phrase in phrases(words(all_enb), phrase_length):
 
 
 def repeated_phrases(counts, threshold):
+    # FIXME: How to make sure overlapping phrases aren't counted?
     repeated = []
     for item in counts:
-        if counts[item] >= threshold:
+        if counts[item] == threshold:
             repeated.append((item, counts[item]))
     return repeated
 
 for i in range(2, 8):
     num_repeats = len(repeated_phrases(counts, i))
-    statement = '# of phrases of length {0} repeated {1} or more times: {2}'
+    statement = '# of phrases of length {0} repeated {1} times: {2}'
     print statement.format(phrase_length, i, num_repeats)
 
 
