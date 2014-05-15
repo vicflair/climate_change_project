@@ -64,11 +64,21 @@ if len(args) > 0:
 
 
 ###############################################################################
+from llda_enb import *
 enb_file = '../enb/ENB_Reports.csv'
-print('Loading '  + enb_file)
-with open(enb_file) as f:
-    data = csv.reader(f, delimiter='\t')
-    reports = [row[7].lower() for row in data]
+taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+                                              kpex_variants_file, taxonomy)
+corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+reports = map(lambda x: ' '.join(x), corpus)
+
+# print('Loading '  + enb_file)
+# with open(enb_file) as f:
+#     data = csv.reader(f, delimiter='\t')
+#     reports = [row[7].lower() for row in data]
 labels = [0]*len(reports)
 true_k = 10
 
@@ -143,27 +153,47 @@ print("Adjusted Rand-Index: %.3f"
 print()
 
 ###############################################################################
-# Post-analysis
-stop = stopwords.words('english')
-count = [0]*true_k
-for i in km.labels_:
-    count[i] += 1
-topics = []
-for i in range(true_k):
-    topics.append([report for j, report in enumerate(reports)
-                  if km.labels_[j] == i])
-tokens = []
-for topic in topics:
-    all_words = []
-    for report in topic:
-        # report = remove_non_ascii(report)
-        doc = []
-        for sent in sent_tokenize(report):
-            doc += [word for word in word_tokenize(sent) if word not in stop]
-        words = [x for x in doc if x[0] in string.ascii_letters]
-        all_words += words
-    tokens.append(all_words)
-
-for token in tokens:
-    fd = FreqDist(token)
-    fd.tabulate(15)
+# # VMa Post-analysis
+# stop = stopwords.words('english')
+# count = [0]*true_k
+# for i in km.labels_:
+#     count[i] += 1
+#
+# # Group reports by topics
+# topics = []
+# for i in range(true_k):
+#     topics.append([report for j, report in enumerate(reports)
+#                   if km.labels_[j] == i])
+#
+# # Get top N terms for each topic
+# tokens = []
+# for topic in topics:
+#     all_words = []
+#     for report in topic:
+#         # report = remove_non_ascii(report)
+#         doc = []
+#         for sent in sent_tokenize(report):
+#             doc += [word for word in word_tokenize(sent) if word not in stop]
+#         words = [x for x in doc if x[0] in string.ascii_letters]
+#         all_words += words
+#     tokens.append(all_words)
+#
+# for token in tokens:
+#     fd = FreqDist(token)
+#     print('')
+#     for i in range(0, 30):
+#         print(fd.keys()[i], fd.values()[i])
+#
+# # For each topic (set of tokens), get the frequency count of all concepts in
+# # taxonomy. Get top N concepts for each topic. Rank and display
+# for token in tokens:
+#     concepts = [term for term in token if term in taxonomy]
+#     fd = FreqDist(concepts)
+#     concept_counts = []
+#     for key, value in zip(fd.keys(), fd.values()):
+#         freq = round(100.0*value/fd.N(), 1)
+#         info = (key, value, freq)
+#         concept_counts.append(info)
+#     print('')
+#     for i in range(0, 15):
+#         print(concept_counts[i][0], str(concept_counts[i][2])+'%')

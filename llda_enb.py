@@ -15,7 +15,6 @@ import re
 import string
 import subprocess
 import sys
-import time
 import warnings
 from llda import LLDA
 from nltk.corpus import stopwords
