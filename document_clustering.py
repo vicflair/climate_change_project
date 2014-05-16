@@ -25,6 +25,7 @@ from time import time
 import numpy as np
 import csv
 import string
+import pickle
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk.tokenize import sent_tokenize, word_tokenize
@@ -65,14 +66,17 @@ if len(args) > 0:
 
 ###############################################################################
 from llda_enb import *
-enb_file = '../enb/ENB_Reports.csv'
-taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
-kpex_variants_file = 'KPEX_ENB_term_variants.txt'
-taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
-frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
-                                              kpex_variants_file, taxonomy)
-corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+# enb_file = '../enb/ENB_Reports.csv'
+# taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+# kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+# kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+# taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+# frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+#                                               kpex_variants_file, taxonomy)
+# corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+with open('enb_corpus', 'r') as f:
+    corpus = pickle.load(f)
+
 reports = map(lambda x: ' '.join(x), corpus)
 
 # print('Loading '  + enb_file)
@@ -80,7 +84,7 @@ reports = map(lambda x: ' '.join(x), corpus)
 #     data = csv.reader(f, delimiter='\t')
 #     reports = [row[7].lower() for row in data]
 labels = [0]*len(reports)
-true_k = 10
+true_k = 30
 
 print("%d documents" % len(reports))
 print("%d categories" % true_k)
@@ -151,6 +155,80 @@ print("Adjusted Rand-Index: %.3f"
 # print("Silhouette Coefficient: %0.3f"
 #       % metrics.silhouette_score(X, labels, sample_size=1000))
 print()
+
+###############################################################################
+####### Run L-LDA  #######
+
+labels = map(lambda x: ['cluster_'+str(x)], list(km.labels_))
+with open('taxonomy', 'r') as f:
+    taxonomy = pickle.load(f)
+tmt_file = 'tmt-0.4.0.jar'
+llda_script = '6-llda-learn.scala'
+training_file = 'labeled_by_kmeans'
+output_folder = 'topics_kmeans'
+
+write_training_set(corpus, labels, training_file, semisupervised=False)
+llda_learn(tmt_file, llda_script, training_file, output_folder)
+
+# Process results
+command = ['cp', output_folder+'/01500/topic-term-distributions.csv.gz',
+           output_folder+'/01500/results.csv.gz']
+subprocess.call(command)
+command = ['gunzip', output_folder+'/01500/results.csv.gz']
+subprocess.call(command)
+with open(output_folder+'/01500/term-index.txt', 'r') as f:
+    terms = f.readlines()
+    terms = map(str.rstrip, terms)
+with open(output_folder+'/01500/label-index.txt', 'r') as f:
+    labels = f.readlines()
+    labels = map(str.rstrip, labels)
+topics = dict()
+with open(output_folder+'/01500/results.csv', 'r') as f:
+    data = csv.reader(f, delimiter=',')
+    data = [row for row in data]
+    for i, label in enumerate(labels):
+        topics[label] = dict()
+        for j, term in enumerate(terms):
+            topics[label][term] = float(data[i][j])
+
+# View top N concepts
+N = 15
+for label in labels:
+    print('')
+    line = '-'*17+label+'-'*17
+    print(line)
+    ordered = [(term, topics[label][term]) for term in terms
+               if term in taxonomy]
+    ordered = sorted(ordered, key=lambda tup: tup[1], reverse=True)
+    # new_ordered = ordered
+    # for item in ordered:
+    #     full_term = [oterm for oterm in original_taxonomy
+    #                  if oterm.replace('_', '') == item[0]]
+    #     new_ordered.append((full_term[0], item[1]))
+    for i in range(N):
+        #print new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%'
+        line = '%40s %5s' % (ordered[i][0], str(round(ordered[i][1], 1)) + '%')
+        print(line)
+
+# Write to file
+N = 15
+with open('results_cluster_kmeans.txt', 'w') as f:
+    for label in labels:
+        line = '-'*17+label+'-'*17 + '\n'
+        f.write(line)
+        ordered = [(term, topics[label][term]) for term in terms
+                   if term in taxonomy]
+        ordered = sorted(ordered, key=lambda tup: tup[1], reverse=True)
+        # new_ordered = ordered
+        # for item in ordered:
+        #     full_term = [oterm for oterm in original_taxonomy
+        #                  if oterm.replace('_', '') == item[0]]
+        #     new_ordered.append((full_term[0], item[1]))
+        for i in range(N):
+            #print new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%'
+            line = '%40s %5s' % (ordered[i][0], str(round(ordered[i][1], 1)) + '%')
+            f.write(line+'\n')
+        f.write('\n')
 
 ###############################################################################
 # # VMa Post-analysis

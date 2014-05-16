@@ -51,7 +51,11 @@ def get_repeats(r, min_length, min_count):
 
 def sort_repeats(repeats, facet):
     assert type(facet) is int
-    ordered = sorted(repeats, key=lambda tup: tup[facet])
+    ordered = sorted(repeats, key=lambda tup: tup[facet], reverse=True)
     return ordered
 
-repeats = sort_repeats(get_repeats(r, 30, 2), 2)
+repeats = sort_repeats(get_repeats(r, 60, 2), 2)
+
+with open('repeated_maximal_phrases.txt', 'w') as f:
+    for repeat in repeats:
+        f.write('\"'+repeat[0]+'\"'+', repeated ' + str(repeat[2]) + ' times.\n')

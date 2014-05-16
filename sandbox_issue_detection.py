@@ -161,4 +161,9 @@ for i in range(2, 8):
     statement = '# of phrases of length {0} repeated {1} times: {2}'
     print statement.format(phrase_length, i, num_repeats)
 
-
+with open("results_issue_detection.txt", 'w') as f:
+    for i, issue in enumerate(issues):
+        f.write('---#' + str(i) + '---')
+        f.write('<'+issue[0]+'><'+issue[1]+'><'+issue[2]+'>\n')
+        f.write(issue[3]+'\n')
+        f.write('\n')

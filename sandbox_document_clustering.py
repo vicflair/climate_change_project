@@ -13,6 +13,9 @@ enb_file = '../enb/ENB_Reports.csv'
 # frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
 #                                               kpex_variants_file, taxonomy)
 # corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+with open('taxonomy', 'r') as f:
+    original_taxonomy = pickle.load(f)
+    taxonomy = map(lambda s: s.replace('_', ''), original_taxonomy)
 with open('enb_corpus', 'r') as f:
     corpus = pickle.load(f)
 reports = map(lambda x: ' '.join(x), corpus)
@@ -32,7 +35,7 @@ with open('countries', 'r') as f:
     countries = pickle.load(f)
 actors = []
 for report in reports:
-    actors.append([country for country in countries
+    actors.append([country.replace(' ', '_') for country in countries
                    if ' ' + country + ' ' in report])
 soft_facets['actor'] = actors
 
@@ -45,13 +48,59 @@ labels = soft_facets['actor']
 write_training_set(corpus, labels, training_file, semisupervised=False)
 llda_learn(tmt_file, llda_script, training_file, output_folder)
 
-# View results
-command = ['cp', 'topic-term-distributions.csv.gz', 'results.csv.gz']
+# Process results
+command = ['cp', output_folder+'/01500/topic-term-distributions.csv.gz',
+           output_folder+'/01500/results.csv.gz']
 subprocess.call(command)
-command = ['gunzip', 'results.csv.gz']
+command = ['gunzip', output_folder+'/01500/results.csv.gz']
 subprocess.call(command)
-with open(output_folder+'/01500/results.csv', 'r') as f:
-    pass
 with open(output_folder+'/01500/term-index.txt', 'r') as f:
     terms = f.readlines()
     terms = map(str.rstrip, terms)
+with open(output_folder+'/01500/label-index.txt', 'r') as f:
+    labels = f.readlines()
+    labels = map(str.rstrip, labels)
+topics = dict()
+with open(output_folder+'/01500/results.csv', 'r') as f:
+    data = csv.reader(f, delimiter=',')
+    data = [row for row in data]
+    for i, label in enumerate(labels):
+        topics[label] = dict()
+        for j, term in enumerate(terms):
+            topics[label][term] = float(data[i][j])
+
+# View top N concepts
+N = 15
+for label in labels:
+    print ''
+    print '-'*17+label+'-'*17
+    ordered = [(term, topics[label][term]) for term in terms
+               if term in taxonomy]
+    ordered = sorted(ordered, key=lambda tup: tup[1], reverse=True)
+    new_ordered = []
+    for item in ordered:
+        full_term = [oterm for oterm in original_taxonomy
+                     if oterm.replace('_', '') == item[0]]
+        new_ordered.append((full_term[0], item[1]))
+    for i in range(N):
+        #print new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%'
+        line = '%40s %5s' % (new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%')
+        print line
+
+with open('results_cluster_by_actors.txt', 'w') as f:
+    N = 15
+    for label in labels:
+        f.write('\n')
+        f.write('-'*17+label+'-'*17+'\n')
+        ordered = [(term, topics[label][term]) for term in terms
+                   if term in taxonomy]
+        ordered = sorted(ordered, key=lambda tup: tup[1], reverse=True)
+        new_ordered = []
+        for item in ordered:
+            full_term = [oterm for oterm in original_taxonomy
+                         if oterm.replace('_', '') == item[0]]
+            new_ordered.append((full_term[0], item[1]))
+        for i in range(N):
+            #print new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%'
+            line = '%40s %5s' % (new_ordered[i][0], str(round(new_ordered[i][1],1)) + '%')
+            f.write(line+'\n')
