@@ -157,6 +157,10 @@ print '{:>20} {:>15}'.format('Actor', '# of Reports')
 print '{:>20} {:>15}'.format('-----', '------------')
 for label, count in zip(label_index, label_counts):
     print '{:>20} {:>15}'.format(label, count)
+with open('TOP_1_ACTOR_COUNTS.txt', 'w') as f:
+    f.write('ACTOR, # OF REPORTS\n')
+    for label, count in zip(label_index, label_counts):
+        f.write(label + ',' + str(count))
 
 # Print counts for # of documents with each label in the top N
 N = 3
@@ -173,5 +177,6 @@ print '{:>20} {:>15}'.format('-----', '------------')
 for label, count in zip(label_index, label_counts):
     print '{:>20} {:>15}'.format(label, count)
 with open('TOP_3_ACTOR_COUNTS.txt', 'w') as f:
-    f.write('TOP 3 ACTOR COUNTS\n')
-    f.write()
+    f.write('ACTOR, # OF REPORTS\n')
+    for label, count in zip(label_index, label_counts):
+        f.write(label + ',' + str(count))
