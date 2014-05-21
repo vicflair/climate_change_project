@@ -302,9 +302,13 @@ def prepare_training_set(enb_file, synonyms, frequencies, taxonomy):
 
 
 def remove_non_ascii(text):
+    # Remove unprintable characters
     ascii_chars = map(lambda s: s if s in string.printable else ' ', text)
     ascii_only_string = ''.join(ascii_chars)
-    ascii_only_text = re.sub(' +', ' ', ascii_only_string)
+    # Replace \t, \n, \r with spaces
+    ascii_replaced = re.sub('[\t\n\r\x0b\x0c]', ' ', ascii_only_string)
+    # Condense spaces
+    ascii_only_text = re.sub(' +', ' ', ascii_replaced)
     return ascii_only_text
 
 
@@ -319,6 +323,7 @@ def prepare_taxonomy(fname, cluster=False):
     Output:
     taxonomy _ list of taxonomic concepts as strings, normalized and sanitized
     """
+    csv.field_size_limit(sys.maxsize)
     with open(fname, 'r', ) as f:
         data = csv.reader(f, delimiter='\t')
         rows = [row for row in data]
@@ -487,16 +492,26 @@ def llda_learn(tmt, script, training_set, output_folder):
     subprocess.call(command)
 
 
+def llda_infer(tmt, script, model_path, target_file, output_file):
+    # Perform inference on unlabeled reports
+    command = ['java', '-jar', tmt, script, model_path, target_file,
+               output_file]
+    print 'Run (L-)LDA-based inference with command: '
+    print command
+    subprocess.call(command)
+
+
 def iterative_llda():
     pass
 
 
 def main(args):
-    enb_file = '../enb/ENB_Reports.csv'
+    # enb_file = '../enb/ENB_Reports.csv'
+    enb_file = 'enb_archives_corpus_texts.csv'
     taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
     kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
     kpex_variants_file = 'KPEX_ENB_term_variants.txt'
-    training_file = 'llda_training_set'
+    training_file = 'enb_archives_llda_training_set'
     tmt_file = 'tmt-0.4.0.jar'
     llda_script = '6-llda-learn.scala'
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)

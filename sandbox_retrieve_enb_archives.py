@@ -2,51 +2,82 @@ import urllib
 import pickle
 import re
 
-# Get list of all English ENB reports to download
-url_enb_archives = 'http://www.iisd.ca/download/asc/'
-filehandle = urllib.urlopen(url_enb_archives)
-content = filehandle.read()
-enb_reports_en = re.findall('(?:>)(enb[\d]+e.txt)(?:<)', content)
-# Get and parse each report text and paragraphs
-all_paragraphs = []
-all_texts = []
-for enb_report in enb_reports_en:
-    url_report = url_enb_archives + enb_report
-    fh = urllib.urlopen(url_report)
-    report_text = fh.read()
-    all_texts.append(report_text)
-    # Different types of paragraph formatting
-    if '\r\n\r\n' in report_text:
-        split_text = report_text.split('\r\n\r\n')
-        paragraphs = map(lambda s: s.replace('\r\n', ' '), split_text)
-    elif '\r\n  \r\n  ' in report_text:
-        split_text = report_text.split('\r\n  \r\n  ')
-        paragraphs = map(lambda s: s.replace('\r\n', ' '), split_text)
-    elif '\n\n' in report_text:
-        split_text = report_text.split('\n\n')
-        paragraphs = map(lambda s: s.replace('\n', ' '), split_text)
-    # Common paragraph formatting
-    paragraphs = map(lambda s: s.replace('\t', ' '), paragraphs)
-    all_paragraphs.append(paragraphs)
-# Save results
-with open('enb_archives_texts', 'w') as f:
-    pickle.dump(all_texts, f)
-with open('enb_archives_paragraphs', 'w') as f:
-    pickle.dump(all_paragraphs, f)
-# Show unique set of unicode characters
-all_unicode = []
-for text in all_texts:
-    unicode = re.findall('[^\x00-\x7f]+', text)
-    all_unicode.append(unicode)
-unicode_set = list(set(reduce(list.__add__, all_unicode)))
-# Find occurrences of each unicode character sequence
-examples = dict()
-for uni in unicode_set:
-    examples[uni] = []
-    for paragraphs in all_paragraphs:
-        for para in paragraphs:
-            if uni in para:
-                examples[uni].append(para)
+
+def download_enb_archive():
+    # Get list of all English ENB reports to download
+    url_enb_archives = 'http://www.iisd.ca/download/asc/'
+    enb_reports_en = get_enb_list(url_enb_archives)
+    # Get all texts in whole and split into paragraphs
+    all_texts, all_paragraphs = process_enb_reports(url_enb_archives,
+                                                    enb_reports_en)
+    # Save results
+    with open('enb_archives_texts', 'w') as f:
+        pickle.dump(all_texts, f)
+    with open('enb_archives_paragraphs', 'w') as f:
+        pickle.dump(all_paragraphs, f)
+    # Write results to dummy .csv format for llda_enb.py
+    with open('enb_archives_corpus_texts.csv', 'w') as f:
+        for text in all_texts:
+            f.write('0\t'*7 + text + '\n')
+    with open('enb_archives_corpus_paragraphs.csv', 'w') as f:
+        for paragraphs in all_paragraphs:
+            for para in paragraphs:
+                f.write('\t'*7 + para + '\n')
+
+
+def find_non_ascii_chars(texts):
+    # Show unique set of unicode characters
+    all_unicode = []
+    for text in all_texts:
+        unicode = re.findall('[^\x00-\x7f]+', text)
+        all_unicode.append(unicode)
+    unicode_set = list(set(reduce(list.__add__, all_unicode)))
+    # Find occurrences of each unicode character sequence
+    examples = dict()
+    for uni in unicode_set:
+        examples[uni] = []
+        for paragraphs in all_paragraphs:
+            for para in paragraphs:
+                if uni in para:
+                    examples[uni].append(para)
+    return unicode_set, examples
+
+
+def get_enb_list(url_enb_archives):
+    filehandle = urllib.urlopen(url_enb_archives)
+    content = filehandle.read()
+    enb_reports_en = re.findall('(?:>)(enb[\d]+e.txt)(?:<)', content)
+    return enb_reports_en
+
+
+def process_enb_reports(url_enb_archives, enb_reports_en):
+    # Get and parse each report text and paragraphs
+    all_paragraphs = []
+    all_texts = []
+    for enb_report in enb_reports_en:
+        url_report = url_enb_archives + enb_report
+        fh = urllib.urlopen(url_report)
+        report_text = fh.read()
+        report_text_ascii_only = replace_unicode(report_text)
+        # Different types of paragraph formatting
+        if '\r\n\r\n' in report_text:
+            split_text = report_text.split('\r\n\r\n')
+            paragraphs = map(lambda s: s.replace('\r\n', ' '), split_text)
+            text = report_text_ascii_only.replace('\r\n', ' ')
+        elif '\r\n  \r\n  ' in report_text:
+            split_text = report_text.split('\r\n  \r\n  ')
+            paragraphs = map(lambda s: s.replace('\r\n', ' '), split_text)
+            text = report_text_ascii_only.replace('\r\n', ' ')
+        elif '\n\n' in report_text:
+            split_text = report_text.split('\n\n')
+            paragraphs = map(lambda s: s.replace('\n', ' '), split_text)
+            text = report_text_ascii_only.replace('\n', ' ')
+        # Common paragraph formatting
+        paragraphs = map(lambda s: s.replace('\t', ' '), paragraphs)
+        all_paragraphs.append(paragraphs)
+        all_texts.append(text)
+    return all_texts, all_paragraphs
+
 
 def replace_unicode(text):
     """ Replace non-ASCII unicode characters in ENB corpus using manually
@@ -106,3 +137,10 @@ def replace_unicode(text):
         if r[0] in text:
             text = text.replace(r[0], r[1])
     return text
+
+
+def main():
+    download_enb_archive()
+
+if __name__ == '__main__':
+    main()
