@@ -4,15 +4,14 @@ from llda_enb import *
 
 
 # Get corpus texts
-from llda_enb import *
 enb_file = '../enb/ENB_Reports.csv'
-# taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-# kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
-# kpex_variants_file = 'KPEX_ENB_term_variants.txt'
-# taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
-# frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
-#                                               kpex_variants_file, taxonomy)
-# corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
+                                              kpex_variants_file, taxonomy)
+corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
 with open('taxonomy', 'r') as f:
     original_taxonomy = pickle.load(f)
     taxonomy = map(lambda s: s.replace('_', ''), original_taxonomy)
@@ -160,7 +159,7 @@ for label, count in zip(label_index, label_counts):
 with open('TOP_1_ACTOR_COUNTS.txt', 'w') as f:
     f.write('ACTOR, # OF REPORTS\n')
     for label, count in zip(label_index, label_counts):
-        f.write(label + ',' + str(count))
+        f.write(label + ',' + str(count) + '\n')
 
 # Print counts for # of documents with each label in the top N
 N = 3
@@ -179,4 +178,4 @@ for label, count in zip(label_index, label_counts):
 with open('TOP_3_ACTOR_COUNTS.txt', 'w') as f:
     f.write('ACTOR, # OF REPORTS\n')
     for label, count in zip(label_index, label_counts):
-        f.write(label + ',' + str(count))
+        f.write(label + ',' + str(count) + '\n')

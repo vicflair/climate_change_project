@@ -1,6 +1,7 @@
 import urllib
 import pickle
 import re
+import subprocess
 
 
 def download_enb_archive():
@@ -48,6 +49,18 @@ def get_enb_list(url_enb_archives):
     content = filehandle.read()
     enb_reports_en = re.findall('(?:>)(enb[\d]+e.txt)(?:<)', content)
     return enb_reports_en
+
+
+def save_enb_reports(url_enb_archives, enb_reports, output_folder):
+    # Save ENB reports locally
+    for i, enb_report in enumerate(enb_reports):
+        print 'Downloading %s (%d of %d)' % (enb_report, i, len(enb_reports))
+        url_report = url_enb_archives + enb_report
+        fh = urllib.urlopen(url_report)
+        report_text = fh.read()
+        report_filepath = '/'.join([output_folder, enb_report])
+        with open(report_filepath, 'w') as f:
+            f.write(report_text)
 
 
 def process_enb_reports(url_enb_archives, enb_reports_en):
