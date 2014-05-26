@@ -123,22 +123,25 @@ def process_kpex_concepts(kpex_concepts_file, kpex_variants_file, taxonomy):
     frequencies = {}
     with open(kpex_concepts_file, 'r') as f:
         data = f.readlines()
-    for line in [x.lower() for x in data]:
-        regexp = re.compile('([^:]*)::syn::([\w]*),f ([\d]*)')
-        with_synonym = re.search(regexp, line)
-        if with_synonym:
-            concept = with_synonym.group(1).replace(' ', '_')
-            synonym = with_synonym.group(2).replace(' ', '_')
-            frequency = with_synonym.group(3)
+    for line in [x.lower().split(',') for x in data]:
+        # Extract KPEX concept/n-gram
+        concept_match = re.search('[^:]*', line[0])
+        concept = concept_match.group().replace(' ', '_')
+        # Extract synonym, if it exists.
+        synonym_match = re.search('(?<=::syn::)([\w]*)', line[0])
+        if synonym_match:
+            synonym = synonym_match.group().replace(' ', '_')
             synonyms[synonym] = concept
-        else:
-            regexp = re.compile('([^:]*)(,f )([\d]*)')
-            no_syn = re.search(regexp, line)
-            concept = no_syn.group(1).replace(' ', '_')
-            frequency = no_syn.group(3)
-        frequencies[concept] = int(frequency)
-
-    synonyms = add_kpex_variants(kpex_variants_file, synonyms, taxonomy)
+        # Extract KPEX score for ranking concepts/n-grams
+        # TODO: Currently, the score is unused.
+        score_match = re.search('[\d\.]*', line[1])
+        score = float(score_match.group())
+        # Extract frequency/count
+        frequency_match = re.search('[\d]+', line[2])
+        frequency = int(frequency_match.group())
+        frequencies[concept] = frequency
+    if kpex_variants_file != '':
+        synonyms = add_kpex_variants(kpex_variants_file, synonyms, taxonomy)
     return frequencies, synonyms
 
 
@@ -445,9 +448,13 @@ def assign_labels(labelset, taxonomy, corpus):
                                if label in document]
             labels.append(document_labels)
         elif type(taxonomy) is dict:
-            presence = [term for term in taxonomy[label] if term in document]
-            if presence:
-                labels.append(document_labels)
+            document_labels = []
+            for label in labelset:
+                presence = [term for term in taxonomy[label] if term in
+                            document]
+                if presence:
+                    document_labels.append(label)
+            labels.append(document_labels)
     with open('labels', 'w') as f:
         pickle.dump(labels, f)
         print 'Wrote assigned labels to \'labels\''
@@ -455,6 +462,8 @@ def assign_labels(labelset, taxonomy, corpus):
 
 
 def write_training_set(corpus, labels, fname, semisupervised=False):
+    if semisupervised:
+        all_labels = ' '.join(set(reduce(list.__add__, labels)))
     with open(fname, 'w') as f:
         for i, label in enumerate(labels):
             if label:
@@ -466,7 +475,7 @@ def write_training_set(corpus, labels, fname, semisupervised=False):
             elif semisupervised:
                 text = '\"' + ' '.join(corpus[i]) + '\"'
                 text = text.replace('_', '')
-                labels_str = ' '.join(labelset)
+                labels_str = all_labels
                 line = ','.join([str(i), labels_str, text]) + '\n'
                 f.write(line)
             else:
@@ -476,7 +485,7 @@ def write_training_set(corpus, labels, fname, semisupervised=False):
 
 def llda_learn(tmt, script, training_set, output_folder):
     # Clear existing intermediate files
-    remove_intermediate_files = ['rm', '-r', training_set + '.*']
+    remove_intermediate_files = ['rm', training_set + '.*']
     print 'Remove existing intermediate files with command: '
     print remove_intermediate_files
     subprocess.call(remove_intermediate_files)
@@ -501,27 +510,136 @@ def llda_infer(tmt, script, model_path, target_file, output_file):
     subprocess.call(command)
 
 
+def show_inferences(model_path, output_file):
+    # Process results
+    command = ['cp', model_path + '/01500/topic-term-distributions.csv.gz',
+               model_path + '/01500/results.csv.gz']
+    subprocess.call(command)
+    command = ['gunzip', model_path + '/01500/results.csv.gz']
+    subprocess.call(command)
+    with open(model_path + '/01500/term-index.txt', 'r') as f:
+        terms = f.readlines()
+        terms = map(str.rstrip, terms)
+    with open(model_path + '/01500/label-index.txt', 'r') as f:
+        label_index = f.readlines()
+        label_index = map(str.rstrip, label_index)
+    topics = dict()
+    with open(model_path + '/01500/results.csv', 'r') as f:
+        data = csv.reader(f, delimiter=',')
+        data = [row for row in data]
+        for i, label in enumerate(label_index):
+            topics[label] = dict()
+            for j, term in enumerate(terms):
+                topics[label][term] = float(data[i][j])
+
+    # Get ranked labels for each report
+    with open(output_file, 'r') as f:
+        data = csv.reader(f, delimiter=',')
+        inferences = [(int(row[0]), map(float, row[1:])) for row in data]
+    ranked_labels = []
+    for inference in inferences:
+        id_num = inference[0]
+        label_distribution = zip(label_index, inference[1])
+        ordered_labels = sorted(label_distribution, key=lambda t: t[1],
+                                     reverse=True)
+        ranked_labels.append((id_num, ordered_labels))
+
+    # Print top N labels for each report
+    N = 3
+    with open('TOP_3_TOPICS_PER_ENB_DOCUMENT.txt', 'w') as f:
+        for id_num, ordered_labels in ranked_labels:
+            print 'Report ID# %d' % id_num
+            print '{:>25} {:>20}-'.format('--Topics--', '--Proportion-')
+            for i in range(N):
+                print '{:>25} {:>20}%'.format(ordered_labels[i][0],
+                                              round(100 * ordered_labels[i][1],
+                                                    2))
+            print ''
+            f.write('Report ID# %d\n' % id_num)
+            f.write('{:>25} {:>20}-\n'.format('--Topics--', '--Proportion-'))
+            for i in range(N):
+                line = '{:>25} {:>20}%\n'.format(ordered_labels[i][0],
+                                                 round(100 *
+                                                       ordered_labels[i][1],
+                                                       2))
+                f.write(line)
+            f.write('\n')
+
+    # Save ENB topics as tags
+    enb_files_list = 'allenb.txt'
+    with open(enb_files_list, 'r') as f:
+        files = f.readlines()
+    enb_files = map(str.rstrip, files)
+    for id_num, ordered_labels in ranked_labels:
+        with open('sw_enb_tags/' + enb_files[id_num] + '.tags', 'w') as f:
+            for i in range(N):
+                f.write(ordered_labels[i][0] + '\n')
+
+    # Print counts for # of documents with each label in position 1:3
+    with open('TOP_3_TOPICS_COUNTS.txt', 'w') as f:
+        for N in range(3):
+            label_counts = []
+            for label in label_index:
+                count = 0
+                for id_num, ordered_labels in ranked_labels:
+                    if label == ordered_labels[N][0]:
+                        count += 1
+                label_counts.append(count)
+            print 'TOPIC COUNTS IN RANK %d' % (N+1)
+            print '{:>25} {:>15}'.format('Topic', '# of Reports')
+            print '{:>25} {:>15}'.format('-----', '------------')
+            ordered_label_counts = sorted(zip(label_index, label_counts),
+                                          key=lambda t: t[1], reverse=True)
+            for label, count in ordered_label_counts:
+                print '{:>25} {:>15}'.format(label, count)
+            print ''
+
+            f.write('TOPIC COUNTS IN RANK %d\n' % (N+1))
+            f.write('{:>25} {:>15}\n'.format('Topic', '# of Reports'))
+            f.write('{:>25} {:>15}\n'.format('-----', '------------'))
+            ordered_label_counts = sorted(zip(label_index, label_counts),
+                                          key=lambda t: t[1], reverse=True)
+            for label, count in ordered_label_counts:
+                f.write('{:>25} {:>15}\n'.format(label, count))
+            f.write('\n')
+
+
 def iterative_llda():
     pass
 
 
 def main(args):
     # enb_file = '../enb/ENB_Reports.csv'
-    enb_file = 'enb_archives_corpus_texts.csv'
-    taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
-    kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
-    kpex_variants_file = 'KPEX_ENB_term_variants.txt'
-    training_file = 'enb_archives_llda_training_set'
+    # enb_file = 'enb_archives_corpus_texts.csv'
+    enb_file = 'sw_enb_reports.csv'
+    #taxonomy_file = '../enb/ENB_Issue_Dictionaries.csv'
+    taxonomy_file = 'twitter_ontology.csv'
+    #kpex_concepts_file = 'enb_corpus_kpex.kpex_n9999.txt'
+    kpex_concepts_file = '../enb/compiled_enb_reports.kpex_n9999.txt'
+    # kpex_variants_file = 'KPEX_ENB_term_variants.txt'
+    kpex_variants_file = ''
+    training_file = 'sw_enb_llda_training_set'
+    testing_file = 'sw_enb_llda_testing_set'
     tmt_file = 'tmt-0.4.0.jar'
-    llda_script = '6-llda-learn.scala'
-    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    llda_learn_script = '6-llda-learn.scala'
+    llda_infer_script = '7-llda-infer.scala'
+    model_path = 'sw_enb_amit_topics'
+    inference_file = 'sw_enb_inferences.tsv'
+
+    taxonomy = prepare_taxonomy(taxonomy_file, cluster=True)
     frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
                                                   kpex_variants_file, taxonomy)
     corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
-    labelset = create_labelset(taxonomy, frequencies, corpus)
+    labelset = create_labelset(taxonomy, frequencies, corpus, threshold=30)
     labels = assign_labels(labelset, taxonomy, corpus)
     write_training_set(corpus, labels, training_file, semisupervised=False)
-    llda_learn(tmt_file, llda_script, training_file, args[1])
+    llda_learn(tmt_file, llda_learn_script, training_file, model_path)
+
+    # Infer over all documents
+    write_training_set(corpus, labels, testing_file, semisupervised=True)
+    llda_infer(tmt_file, llda_infer_script, model_path, testing_file,
+               inference_file)
+    show_inferences(model_path, inference_file)
 
 
 if __name__ == '__main__':
