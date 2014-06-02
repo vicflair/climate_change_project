@@ -290,7 +290,7 @@ def prepare_training_set(enb_file, synonyms, frequencies, taxonomy):
                     taxonomy[index] = synonyms[concept]
         # Chain unigrams into n-grams
         report = make_taxonomic_ngrams(taxonomy, report)
-        report = make_kpex_ngrams(frequencies, report, 50)
+        report = make_kpex_ngrams(frequencies, report, 20)
         doc = []
         # Remove stop words, non-words, non-ASCII characters
         report = remove_non_ascii(report)
@@ -618,18 +618,25 @@ def main(args):
     kpex_concepts_file = '../enb/compiled_enb_reports.kpex_n9999.txt'
     # kpex_variants_file = 'KPEX_ENB_term_variants.txt'
     kpex_variants_file = ''
-    training_file = 'sw_enb_llda_training_set'
-    testing_file = 'sw_enb_llda_testing_set'
+    training_file = 'sw_enb_kpex_train'
+    testing_file = 'sw_enb_kpex_test'
     tmt_file = 'tmt-0.4.0.jar'
     llda_learn_script = '6-llda-learn.scala'
-    llda_infer_script = '7-llda-infer.scala'
-    model_path = 'sw_enb_amit_topics'
-    inference_file = 'sw_enb_inferences.tsv'
+    llda_infer_script = '7a-llda-infer.scala'
+    model_path = 'llda_check_model'
+    inference_file = 'llda_check_inferences.tsv'
 
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=True)
     frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
                                                   kpex_variants_file, taxonomy)
     corpus = prepare_training_set(enb_file, synonyms, frequencies, taxonomy)
+    # Strip corpus of all words not in KPEX or in taxonomy
+    kpex_terms = [term for term in frequencies]
+    filtered_corpus = []
+    for report in corpus:
+        filtered_corpus.append([term for term in report if term in kpex_terms])
+    corpus = filtered_corpus
+
     labelset = create_labelset(taxonomy, frequencies, corpus, threshold=30)
     labels = assign_labels(labelset, taxonomy, corpus)
     write_training_set(corpus, labels, training_file, semisupervised=False)
