@@ -315,7 +315,6 @@ def process_corpus(enb_file, synonyms, frequencies, taxonomy,
         # Keep words only in KPEX terms or ontology
         # keep_words = [term for term in frequencies
         #               if frequencies[term] > kpex_threshold]
-        # keep_words = []
         # if type(taxonomy) is dict:
         #     for concept in taxonomy:
         #         keep_words += taxonomy[concept]
@@ -536,7 +535,7 @@ def llda_infer(tmt, script, model_path, target_file, output_file):
     subprocess.call(command)
 
 
-def show_inferences(model_path, inference_file, underscores, output_folder):
+def show_inferences(model_path, inference_file, underscores):
     # Process results
     command = ['cp', model_path + '/01500/topic-term-distributions.csv.gz',
                model_path + '/01500/results.csv.gz']
@@ -558,8 +557,6 @@ def show_inferences(model_path, inference_file, underscores, output_folder):
             for j, term in enumerate(terms):
                 topics[label][underscores[term]] = float(data[i][j])
 
-    # TODO: SHOW TF-IDF weighted topic vectors
-
     # Get ranked labels for each report
     with open(inference_file, 'r') as f:
         data = csv.reader(f, delimiter=',')
@@ -571,6 +568,21 @@ def show_inferences(model_path, inference_file, underscores, output_folder):
         ordered_labels = sorted(label_distribution, key=lambda t: t[1],
                                      reverse=True)
         ranked_labels.append((id_num, ordered_labels))
+
+    # Get word counts and topic counts from results.csv
+    with open(model_path + '/01500/results.csv', 'r') as f:
+        data = csv.reader(f, delimiter=',')
+        results = [map(float, row) for row in data]
+    counts = {}
+    for i, label in enumerate(label_index):
+        counts[label] = {}
+        for j, term in enumerate(terms):
+            counts[label][term] = results[i][j]
+    return topics, ranked_labels
+
+
+def show_inference_results(topics, ranked_labels, output_folder):
+    # TODO: SHOW TF-IDF weighted topic vectors
 
     # Print top N labels for each report
     N = 3
@@ -632,8 +644,9 @@ def show_inferences(model_path, inference_file, underscores, output_folder):
             f.write('\n')
 
     # Print Top N terms for topics
-    N = 20
-    with open(output_folder + '/TOPICS_SUMMARY_TOP_' + str(N) + '.txt', 'w') as f:
+    N = 50
+    with open(output_folder + '/TOPICS_TOP_' + str(N) + '.txt', 'w') as f:
+    # with open('TOPICS_TOP_50.txt', 'w') as f:
         for topic_label in topics:
             topic = topics[topic_label]
             topic_count = 0
@@ -665,10 +678,10 @@ def show_inferences(model_path, inference_file, underscores, output_folder):
 def iterative_llda():
     pass
 
-
 def main(args):
     enb_file = '../enb/sw_enb_reports.csv'
     taxonomy_file = '../knowledge_base/twitter_ontology.csv'
+    # taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
     label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
     kpex_concepts_file = '../enb/enb_corpus_kpex.kpex_n9999.txt'
     kpex_variants_file = ''
@@ -682,7 +695,7 @@ def main(args):
     work_folder = '../work'
 
     # Prepare data for LLDA
-    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    taxonomy = prepare_taxonomy(taxonomy_file, cluster=True)
     frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
                                                   kpex_variants_file, taxonomy)
     corpus, underscores = process_corpus(enb_file, synonyms, frequencies,
@@ -704,21 +717,25 @@ def main(args):
                                             underscores, work_folder)
 
     # Save all working data
-    with open(work_folder +'/corpus', 'w') as f:
+    with open(work_folder + '/corpus', 'w') as f:
         pickle.dump(corpus, f)
-    with open(work_folder +'/labelset', 'w') as f:
+    with open(work_folder + '/labelset', 'w') as f:
         pickle.dump(labelset, f)
-    with open(work_folder +'/labels', 'w') as f:
+    with open(work_folder + '/labels', 'w') as f:
         pickle.dump(labels, f)
-    with open(work_folder +'/taxonomy', 'w') as f:
+    with open(work_folder + '/taxonomy', 'w') as f:
         pickle.dump(taxonomy, f)
-    with open(work_folder +'/frequencies', 'w') as f:
+    with open(work_folder + '/frequencies', 'w') as f:
         pickle.dump(frequencies, f)
-    with open(work_folder +'/synonyms', 'w') as f:
+    with open(work_folder + '/synonyms', 'w') as f:
         pickle.dump(synonyms, f)
     with open(work_folder + '/topics', 'w') as f:
         pickle.dump(topics, f)
     with open(work_folder + '/ranked_labels', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + '/underscores', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + '/label_taxonomy', 'w') as f:
         pickle.dump(topics, f)
 
 

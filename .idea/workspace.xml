@@ -23,19 +23,10 @@
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file leaf-file-name="llda_enb.py" pinned="false" current="false" current-in-tab="false">
+      <file leaf-file-name="llda_enb.py" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/llda_enb.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="330" column="11" selection-start="12490" selection-end="12490" vertical-scroll-proportion="0.0" vertical-offset="5778" max-vertical-offset="9522">
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="index_enb.py" pinned="false" current="true" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/../es/index_enb.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="11" column="30" selection-start="274" selection-end="274" vertical-scroll-proportion="0.15428571" vertical-offset="0" max-vertical-offset="1050">
+            <state line="648" column="0" selection-start="25890" selection-end="25937" vertical-scroll-proportion="0.26027396" vertical-offset="11164" max-vertical-offset="13248">
               <folding />
             </state>
           </provider>
@@ -59,9 +50,9 @@
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="y" value="24" />
-    <option name="width" value="1920" />
-    <option name="height" value="1176" />
+    <option name="y" value="52" />
+    <option name="width" value="960" />
+    <option name="height" value="1148" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="false">
     <OptionsSetting value="true" id="Add" />
@@ -89,6 +80,7 @@
       <sortByType />
     </navigator>
     <panes>
+      <pane id="Scope" />
       <pane id="ProjectPane">
         <subPane>
           <PATH>
@@ -97,9 +89,18 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
             </PATH_ELEMENT>
           </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="LLDA" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="code" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
         </subPane>
       </pane>
-      <pane id="Scope" />
     </panes>
   </component>
   <component name="PropertiesComponent">
@@ -335,14 +336,14 @@
     </todo-panel>
   </component>
   <component name="ToolWindowManager">
-    <frame x="0" y="24" width="1920" height="1176" extended-state="6" />
-    <editor active="false" />
+    <frame x="0" y="52" width="960" height="1148" extended-state="4" />
+    <editor active="true" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.22592592" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.3361111" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.24986821" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.21085925" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.21024546" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.3998187" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
@@ -376,6 +377,20 @@
     </breakpoint-manager>
   </component>
   <component name="editorHistoryManager">
+    <entry file="file://$PROJECT_DIR$/llda_enb.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="330" column="11" selection-start="13222" selection-end="13222" vertical-scroll-proportion="0.0" vertical-offset="5940" max-vertical-offset="13248">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../es/index_enb.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="11" column="30" selection-start="274" selection-end="274" vertical-scroll-proportion="0.0" vertical-offset="198" max-vertical-offset="2592">
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/llda_enb.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="330" column="11" selection-start="12490" selection-end="12490" vertical-scroll-proportion="0.0" vertical-offset="5940" max-vertical-offset="9522">
@@ -462,16 +477,16 @@
         <state line="17" column="0" selection-start="558" selection-end="558" vertical-scroll-proportion="0.46601942" vertical-offset="0" max-vertical-offset="618" />
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/llda_enb.py">
+    <entry file="file://$PROJECT_DIR$/../es/index_enb.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="330" column="11" selection-start="12490" selection-end="12490" vertical-scroll-proportion="0.0" vertical-offset="5778" max-vertical-offset="9522">
+        <state line="11" column="30" selection-start="274" selection-end="274" vertical-scroll-proportion="-0.03522505" vertical-offset="198" max-vertical-offset="2592">
           <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/../es/index_enb.py">
+    <entry file="file://$PROJECT_DIR$/llda_enb.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="11" column="30" selection-start="274" selection-end="274" vertical-scroll-proportion="0.15428571" vertical-offset="0" max-vertical-offset="1050">
+        <state line="648" column="0" selection-start="25890" selection-end="25937" vertical-scroll-proportion="0.26027396" vertical-offset="11164" max-vertical-offset="13248">
           <folding />
         </state>
       </provider>
