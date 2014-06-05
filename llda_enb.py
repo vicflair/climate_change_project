@@ -130,11 +130,6 @@ def process_kpex_concepts(kpex_concepts_file, kpex_variants_file=None,
         # Extract KPEX concept/n-gram
         concept_match = re.search('[^:]*', line[0])
         concept = concept_match.group().replace(' ', '_')
-        # Extract synonym, if it exists.
-        synonym_match = re.search('(?<=::syn::)(.+)', line[0])
-        if synonym_match:
-            synonym = synonym_match.group().replace(' ', '_')
-            synonyms[synonym] = concept
         # Extract KPEX score for ranking concepts/n-grams
         if len(line) is 3:
             # TODO: Currently, the score is unused.
@@ -145,7 +140,13 @@ def process_kpex_concepts(kpex_concepts_file, kpex_variants_file=None,
         else:
             frequency_match = re.search('[\d]+', line[1])
         frequency = int(frequency_match.group())
-        frequencies[concept] = frequency
+        if frequency >= threshold:
+            frequencies[concept] = frequency
+            # Extract synonym, if it exists.
+            synonym_match = re.search('(?<=::syn::)(.+)', line[0])
+            if synonym_match:
+                synonym = synonym_match.group().replace(' ', '_')
+                synonyms[synonym] = concept
     if kpex_variants_file:
         synonyms = add_kpex_variants(kpex_variants_file, synonyms, taxonomy)
     return frequencies, synonyms
@@ -271,19 +272,21 @@ def make_taxonomic_ngrams(taxonomy, report):
 
 def extract_scientific_articles(article_files, output_filename=None):
     scientific_articles = []
-    for file_path in article_files:
+    for i, file_path in enumerate(article_files):
         with open(file_path, 'r') as f:
             text = f.read()
         scientific_articles.append(text)
+        print '%d of %d files extracted' % (i+1, len(article_files))
     return scientific_articles
 
 
 def extract_kpex_data(kpex_files, threshold=3, output_filename=None):
     kpex_data = []
-    for kpex_file in kpex_files:
+    for i, kpex_file in enumerate(kpex_files):
         frequencies, synonyms = process_kpex_concepts(kpex_file,
                                                       threshold=threshold)
         kpex_data.append((frequencies, synonyms))
+        print '%d of %d files extracted' % (i+1, len(kpex_files))
     if output_filename:
         with open(output_filename, 'w') as f:
             pickle.dump(kpex_data, f)
