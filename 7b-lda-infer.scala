@@ -54,3 +54,10 @@ CSVFile(outputPath).write(perDocTopicDistributions);
 
 //val topTerms = QueryTopicUsage(model, dataset, perDocTopicDistributions);
 //CSVFile(outputPath).write(topTerms);
+
+println("Estimating per-doc per-word topic distributions");
+val perDocWordTopicDistributions = EstimatePerWordTopicDistributions(
+  model, dataset, perDocTopicDistributions);
+CSVFile(outputPath+".per-word-topic-distribution.csv").write(perDocWordTopicDistributions)
+
+

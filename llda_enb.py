@@ -121,7 +121,7 @@ def replace_enb_unicode(text):
 
 
 def process_kpex_concepts(kpex_concepts_file, kpex_variants_file=None,
-                          taxonomy=None, threshold=20):
+                          taxonomy=None, threshold=0):
     synonyms = {}
     frequencies = {}
     with open(kpex_concepts_file, 'r') as f:
@@ -210,21 +210,21 @@ def add_kpex_variants(fname, synonyms, taxonomy):
     return synonyms
 
 
-def replace_synonyms(synonyms, frequencies, text, threshold=50):
+def replace_synonyms(synonyms, frequencies, text, threshold=0):
     """ Replaces synonyms with their "main" form as determined by KPEX, if
     their frequency is above threshold. Assume text is already lowercase
     WITHOUT n-grams, i.e. multi-word terms with underscores, where as
     synonyms is a dict WITH n-grams.
     """
     valid_synonyms = [syn for syn in synonyms
-                      if frequencies[synonyms[syn]] > threshold]
+                      if frequencies[synonyms[syn]] >= threshold]
     for syn in valid_synonyms:
         text = text.replace(' ' + syn.replace('_', ' ') + ' ',
                             ' ' + synonyms[syn].replace('_', ' ') + ' ')
     return text
 
 
-def make_kpex_ngrams(frequencies, text, threshold=50):
+def make_kpex_ngrams(frequencies, text, threshold=0):
     """ Turn unigram phrases into n-grams if their frequency is greater than
     threshold. text is assumed to be already lowercase. This currently
     doesn't order transformations in intelligent ways, e.g., if
@@ -232,7 +232,7 @@ def make_kpex_ngrams(frequencies, text, threshold=50):
     will apply the n-gram transformation that comes first in the KPEX terms
     list, without consideration for n-gram length, score, frequency, etc. """
     for concept in frequencies:
-        if frequencies[concept] > threshold:
+        if frequencies[concept] >= threshold:
             unigrams = concept.replace('_', ' ')
             text = text.replace(unigrams, concept)
     return text
@@ -306,30 +306,34 @@ def get_articles_and_kpex_file_paths(folder_path):
     # don't have a corresponding kpex files
     article_files = [file for file in article_files
                      if file.replace('.txt', '.kpex_n9999.txt') in kpex_files]
+    # Sort so that they match index-wise
+    article_files = sorted(article_files)
+    kpex_files = sorted(kpex_files)
     return article_files, kpex_files
 
 
 def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
-                                threshold=10):
-    """ Sanitizes and formats scientific articles corpus as a list of
-    sanitized documents. Each document is represented as a list of word tokens,
-    all lowercase. Stop words are removed. Concept n-grams are denoted by
-    chaining using underscores, e.g., "sea level rise" => "sea_level_rise"
+                                threshold=0):
+    """ Very similar to the process_enb_reports() except it takes kpex info
+    in a different format since there is one KPEX file for every scientific
+    article as compared to one KPEX file for all ENB reports.
 
-    Input arguments:
-
-    Output arguments:
+    This function is separate because it may be later than the scientific
+    articles require a different set of pre-processing steps.
     """
 
     stop = stopwords.words('english')
     corpus = []
-    for article in scientific_articles:
+    for article, kpex in zip(scientific_articles, kpex_data):
+        # "Unpack" and rename KPEX data items
+        frequencies = kpex[0]
+        synonyms = kpex[1]
         # Remove non-ASCII words and characters:
         article = remove_non_ascii(article)  # TODO: needed for articles?
         # Replace synonyms with main term (according to KPEX) in both corpus
         # and taxonomy (i.e. make one "standard" form)
         article = replace_synonyms(synonyms, frequencies, article,
-                                  threshold=kpex_threshold)
+                                  threshold=threshold)
         assert type(taxonomy) is dict or list
         if type(taxonomy) is dict:
             for concept in taxonomy:
@@ -349,7 +353,11 @@ def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
         for sent in sent_tokenize(article):
             doc += [word for word in word_tokenize(sent) if word not in stop]
         words = [x for x in doc if x[0] in string.ascii_letters]
-        corpus.append(words)
+        # Filter words not in taxonomy or KPEX terms list
+        filtered_words = filter_terms(words, taxonomy=taxonomy,
+                                      frequencies=frequencies,
+                                      threshold=threshold)
+        corpus.append(filtered_words)
     # Save correspondences between underscored and concatenated version of all
     # n-grams in the corpus so we can do backwards conversion after LDA
     all_terms = set(reduce(list.__add__, corpus))
@@ -361,7 +369,7 @@ def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
 
 
 def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
-                         kpex_threshold=10):
+                        threshold=0):
     """ Sanitizes and formats ENB corpus as a list of documents. Each document
     is represented as a list of word tokens, all lowercase. Stop words are
     removed. Concept n-grams are denoted by chaining using underscores, e.g.,
@@ -385,7 +393,7 @@ def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
         # Replace synonyms with main term (according to KPEX) in both corpus
         # and taxonomy (i.e. make one "standard" form)
         report = replace_synonyms(synonyms, frequencies, report,
-                                  threshold=kpex_threshold)
+                                  threshold=threshold)
         assert type(taxonomy) is dict or list
         if type(taxonomy) is dict:
             for concept in taxonomy:
@@ -399,13 +407,17 @@ def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
         # Chain unigrams into n-grams (ontology first, THEN, KPEX terms)
         report = make_taxonomic_ngrams(taxonomy, report)
         report = make_kpex_ngrams(frequencies, report,
-                                  threshold=kpex_threshold)
+                                  threshold=threshold)
         doc = []
         # Remove stop words, non-words
         for sent in sent_tokenize(report):
             doc += [word for word in word_tokenize(sent) if word not in stop]
         words = [x for x in doc if x[0] in string.ascii_letters]
-        corpus.append(words)
+        # Filter words not in taxonomy or KPEX terms list
+        filtered_words = filter_terms(words, taxonomy=taxonomy,
+                                      frequencies=frequencies,
+                                      threshold=threshold)
+        corpus.append(filtered_words)
     # Save correspondences between underscored and concatenated version of all
     # n-grams in the corpus so we can do backwards conversion after LDA
     all_terms = set(reduce(list.__add__, corpus))
@@ -416,15 +428,14 @@ def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
     return corpus, underscores
 
 
-def filter_terms(corpus, taxonomy=None, frequencies=None, kpex_threshold=0):
+def filter_terms(document, taxonomy=None, frequencies=None, threshold=0):
     # Keep words only in KPEX terms or ontology, depending on whether they
     # are provided as input
-    filtered_corpus = []
     # Create list of words to keep
     keep_words = []
     if frequencies:
         keep_words = [term for term in frequencies
-                      if frequencies[term] > kpex_threshold]
+                      if frequencies[term] > threshold]
     if taxonomy:
         if type(taxonomy) is dict:
             for concept in taxonomy:
@@ -436,12 +447,11 @@ def filter_terms(corpus, taxonomy=None, frequencies=None, kpex_threshold=0):
     keep_words = list(set(keep_words))
     # Now filter words and create a filtered corpus
     if keep_words:
-        for report in corpus:
-            filtered_words = [word for word in report if word in keep_words]
-            filtered_corpus.append(filtered_words)
+        filtered_document = [word for word in document if word in keep_words]
     else:
-        filtered_corpus = corpus
-        print 'No filtering on corpus.'
+        filtered_document = document
+        print 'No filtering on document.'
+    return filtered_document
 
 
 def remove_non_ascii(text):
@@ -482,14 +492,18 @@ def prepare_taxonomy(fname, cluster=False):
                 taxonomy[concept].append(term)
             else:
                 taxonomy[concept] = [term]
+        # Ensure each cluster has no duplicates, but allow duplicates across
+        # different clusters (i.e these terms have multiple concepts)
+        for concept in concepts:
+            taxonomy[concept] = list(set(taxonomy[concept]))
     else:
         taxonomy = terms
-    # Ensure taxonomy has no duplicates
-    taxonomy = list(set(taxonomy))
+        # Ensure taxonomy has no duplicates
+        taxonomy = list(set(taxonomy))
     return taxonomy
 
 
-def create_labelset(taxonomy, frequencies, corpus, threshold=30,
+def create_labelset(taxonomy, frequencies, corpus, threshold=0,
                     mode='count'):
     """ Create list of frequently occurring concepts in the corpus to be used
     as labels.
@@ -522,12 +536,12 @@ def create_labelset(taxonomy, frequencies, corpus, threshold=30,
                     else:
                         terms_count += fd[term]
                 print concept, ': #', terms_count
-                if terms_count > threshold:
+                if terms_count >= threshold:
                     labelset.append(concept)
             elif mode is 'freq':
                 # FIXME: Doesn't do frequency yet for KPEX
                 terms_freq = sum([fd.freq(term) for term in concept])
-                if terms_freq > threshold:
+                if terms_freq >= threshold:
                     labelset.append(concept)
     elif type(taxonomy) is list:
         if mode is 'count':
@@ -539,13 +553,13 @@ def create_labelset(taxonomy, frequencies, corpus, threshold=30,
                 else:
                     occurrences = fd[concept]
                 print concept, ': #', occurrences
-                if occurrences > threshold:
+                if occurrences >= threshold:
                     labelset.append(concept)
         elif mode is ' freq':
             for concept in taxonomy:
                 # FIXME: doesn't  do frequency yet for KPEX
                 concept_freq = fd.freq(concept)
-                if concept_freq > threshold:
+                if concept_freq >= threshold:
                     labelset.append(concept)
         else:
             warnings.warn('Mode option is invalid.')
@@ -778,10 +792,81 @@ def show_inference_results(topics, ranked_labels, output_folder):
 def iterative_llda():
     pass
 
-def main(args):
+
+def run_for_scientific_articles():
+    # Set up file paths and names
+    articles_file = '../sciencewise/scientific_articles_17k.pickle'
+    # taxonomy_file = '../knowledge_base/twitter_ontology.csv'
+    taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
+    label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
+    kpex_file = '../sciencewise/kpex_data_17k.pickle'
+    kpex_variants_file = None
+    training_file = '../work/TRAIN'
+    testing_file = '../work/TEST'
+    tmt_file = 'tmt-0.4.0.jar'
+    llda_learn_script = '6-llda-learn.scala'
+    llda_infer_script = '7b-lda-infer.scala'
+    model_path = '../work/model'
+    inference_file = '../work/inferences.tsv'
+    work_folder = '../work'
+
+    # Load scientific articles and KPEX data
+    with open(kpex_file, 'r') as f:
+        kpex_data = pickle.load(f)
+    with open(articles_file) as f:
+        scientific_articles = pickle.load(f)
+
+    # Prepare other data for LLDA now
+    taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
+    corpus, underscores = process_scientific_articles(scientific_articles,
+                                                      kpex_data,
+                                                      taxonomy,
+                                                      threshold=0)
+    label_taxonomy = prepare_taxonomy(label_taxonomy_file, cluster=True)
+    labelset = create_labelset(label_taxonomy, [], corpus,
+                               threshold=0)
+    labels = assign_labels(labelset, label_taxonomy, corpus)
+
+    # Train LLDA
+    write_data_set(corpus, labels, training_file, semisupervised=False)
+    llda_learn(tmt_file, llda_learn_script, training_file, model_path)
+
+    # Infer over all documents
+    write_data_set(corpus, labels, testing_file, semisupervised=True)
+    llda_infer(tmt_file, llda_infer_script, model_path, testing_file,
+               inference_file)
+    topics, ranked_labels = process_inference_results(model_path,
+                                                      inference_file,
+                                                      underscores)
+    show_inference_results(topics, ranked_labels, 'test')
+
+    # Save all working data
+    with open(work_folder + '/corpus', 'w') as f:
+        pickle.dump(corpus, f)
+    with open(work_folder + '/labelset', 'w') as f:
+        pickle.dump(labelset, f)
+    with open(work_folder + '/labels', 'w') as f:
+        pickle.dump(labels, f)
+    with open(work_folder + '/taxonomy', 'w') as f:
+        pickle.dump(taxonomy, f)
+    with open(work_folder + '/frequencies', 'w') as f:
+        pickle.dump(frequencies, f)
+    with open(work_folder + '/synonyms', 'w') as f:
+        pickle.dump(synonyms, f)
+    with open(work_folder + '/topics', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + '/ranked_labels', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + '/underscores', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + '/label_taxonomy', 'w') as f:
+        pickle.dump(topics, f)
+
+
+def run_for_enb_reports():
     enb_file = '../enb/sw_enb_reports.csv'
-    taxonomy_file = '../knowledge_base/twitter_ontology.csv'
-    # taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
+    # taxonomy_file = '../knowledge_base/twitter_ontology.csv'
+    taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
     label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
     kpex_concepts_file = '../enb/enb_corpus_kpex.kpex_n9999.txt'
     kpex_variants_file = None
@@ -798,9 +883,8 @@ def main(args):
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=True)
     frequencies, synonyms = process_kpex_concepts(kpex_concepts_file,
                                                   kpex_variants_file, taxonomy)
-    corpus, underscores = process_enb_corpus(enb_file, synonyms, frequencies,
-                                         taxonomy, kpex_threshold=10)
-    filter_terms(corpus, taxonomy, frequencies, kpex_threshold=10)
+    corpus, underscores = process_enb_reports(enb_file, synonyms, frequencies,
+                                         taxonomy, threshold=10)
     label_taxonomy = prepare_taxonomy(label_taxonomy_file, cluster=True)
     labelset = create_labelset(label_taxonomy, frequencies, corpus,
                                threshold=10)
@@ -839,6 +923,9 @@ def main(args):
     with open(work_folder + '/label_taxonomy', 'w') as f:
         pickle.dump(topics, f)
 
+
+def main():
+    pass
 
 if __name__ == '__main__':
     main(sys.argv)
