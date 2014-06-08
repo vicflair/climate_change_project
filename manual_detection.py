@@ -1,7 +1,12 @@
 import csv
+import sys
 from llda_enb import remove_non_ascii, make_taxonomic_ngrams, lemmatize_word, \
     filter_terms
 from nltk.tokenize import sent_tokenize, word_tokenize
+
+
+# Allow larger entries in CSV files, e.g. for scientific articles
+csv.field_size_limit(sys.maxsize)
 
 
 def detect_enb_concepts(enb_file, taxonomy):
