@@ -42,28 +42,21 @@ System.err.println("Loading model ...");
 val text = source ~> Column(3) ~> TokenizeWith(tokenizer);
 System.err.println("Loading model ...");
  
-val dataset = LDADataset(text,model.termIndex);
+val dataset = LDADataset(text,lldaModel.termIndex);
  
 System.err.println("Generating output ...");
 val perDocTopicDistributions =
-  //InferCVB0DocumentTopicAssignments(model,dataset);
+  //InferCVB0DocumentTopicAssignments(lldaModel,dataset);
   InferCVB0LabeledLDADocumentTopicDistributions(lldaModel, dataset);
-  //InferGibbsLabeledLDADocumentTopicDistributions(model, dataset);
+  //InferGibbsLabeledLDADocumentTopicDistributions(lldaModel, dataset);
 System.err.println("Infer CVB ...");
 //Works
 CSVFile(outputPath).write(perDocTopicDistributions);
 
-//val topTerms = QueryTopicUsage(model, dataset, perDocTopicDistributions);
+//val topTerms = QueryTopicUsage(lldaModel, dataset, perDocTopicDistributions);
 //CSVFile(outputPath).write(topTerms);
-
-println("Writing topic usage to "+outputPath+"-sliced-usage.csv");
-val usage = QueryTopicUsage(lldaModel, dataset, perDocTopicDistributions, grouping=slice);
-CSVFile(outputPath+"-sliced-usage.csv").write(usage);
 
 println("Estimating per-doc per-word topic distributions");
 val perDocWordTopicDistributions = EstimatePerWordTopicDistributions(
   lldaModel, dataset, perDocTopicDistributions);
-
-println("Writing top terms to "+outputPath+"-sliced-top-terms.csv");
-val topTerms = QueryTopTerms(lldaModel, dataset, perDocWordTopicDistributions, numTopTerms=50, grouping=slice);
-CSVFile(outputPath+"-sliced-top-terms.csv").write(usage);
+CSVFile(outputPath+".per-word-topic-distributions.csv").write(perDocWordTopicDistributions)

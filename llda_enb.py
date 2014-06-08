@@ -3,13 +3,14 @@
 #
 # Labeled LDA using the earth negotiations bulletin (ENB) as dataset
 # Processing and pipeline code written by Victor Ma, but uses LLDA code
-# written by Nakatani Shuyo
+# from the Stanford TMT.
 #
 # @author: Victor Ma
 # Date: 14 Apr 2014
 
 import csv
 import numpy
+import ntpath
 import os
 import pickle
 import re
@@ -18,11 +19,43 @@ import subprocess
 import sys
 import time
 import warnings
-from llda import LLDA
+from functools import wraps
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk import pos_tag
 from nltk.tokenize import sent_tokenize, word_tokenize
-from optparse import OptionParser
+
+
+lemmatizer = WordNetLemmatizer()
+
+
+def timeit(func):
+    """ Decorator function used to time execution.
+    """
+    @wraps(func)
+    def timed_function(*args, **kwargs):
+        start = time.time()
+        output = func(*args, **kwargs)
+        end = time.time()
+        print '%s execution time: %f secs' % (func.__name__, end-start)
+        return output
+    return timed_function
+
+
+def memorize(func):
+    """ Decorator function for caching outputs of a function to speed up
+     retrieval time. If an argument has been previously used, the corresponding
+     output will be looked up instead of calculated.
+    """
+    # TODO: Figure out how this cache is maintained. Why doesn't it disappear?
+    cache = {}
+    @wraps(func)
+    def cached_function(*args, **kwargs):
+        if args not in cache:
+            cache[args] = func(*args, **kwargs)
+        return cache[args]
+    return cached_function
 
 
 def replace_enb_unicode(text):
@@ -118,6 +151,12 @@ def replace_enb_unicode(text):
         if r[0] in text:
             text = text.replace(r[0], r[1])
     return text
+
+
+@memorize
+def lemmatize_word(word, pos_tag='n'):
+    lemma = lemmatizer.lemmatize(word, pos_tag)
+    return lemma
 
 
 def process_kpex_concepts(kpex_concepts_file, kpex_variants_file=None,
@@ -349,10 +388,11 @@ def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
         article = make_kpex_ngrams(frequencies, article,
                                    threshold=threshold)
         doc = []
-        # Remove stop words, non-words
+        # Remove stop words, non-words. Lemmatize the rest.
         for sent in sent_tokenize(article):
             doc += [word for word in word_tokenize(sent) if word not in stop]
-        words = [x for x in doc if x[0] in string.ascii_letters]
+        words = [lemmatize_word(x) for x in doc
+                 if x[0] in string.ascii_letters]
         # Filter words not in taxonomy or KPEX terms list
         filtered_words = filter_terms(words, taxonomy=taxonomy,
                                       frequencies=frequencies,
@@ -412,7 +452,8 @@ def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
         # Remove stop words, non-words
         for sent in sent_tokenize(report):
             doc += [word for word in word_tokenize(sent) if word not in stop]
-        words = [x for x in doc if x[0] in string.ascii_letters]
+        words = [lemmatize_word(x) for x in doc
+                 if x[0] in string.ascii_letters]
         # Filter words not in taxonomy or KPEX terms list
         filtered_words = filter_terms(words, taxonomy=taxonomy,
                                       frequencies=frequencies,
@@ -450,7 +491,6 @@ def filter_terms(document, taxonomy=None, frequencies=None, threshold=0):
         filtered_document = [word for word in document if word in keep_words]
     else:
         filtered_document = document
-        print 'No filtering on document.'
     return filtered_document
 
 
@@ -695,72 +735,46 @@ def process_inference_results(model_path, inference_file, underscores):
     return topics, ranked_labels
 
 
-def show_inference_results(topics, ranked_labels, output_folder):
+def write_inference_results(topics, ranked_labels, output_folder):
     # TODO: SHOW TF-IDF weighted topic vectors
 
-    # Print top N labels for each report
+    # Write top N labels for each report
     N = 3
     with open(output_folder + '/TOP_3_TOPICS_PER_ENB_DOCUMENT.txt', 'w') as f:
         for id_num, ordered_labels in ranked_labels:
-            print 'Report ID# %d' % id_num
-            print '{:>25} {:>20}-'.format('--Topics--', '--Proportion-')
-            for i in range(N):
-                print '{:>25} {:>20}%'.format(ordered_labels[i][0],
-                                              round(100 * ordered_labels[i][1],
-                                                    2))
-            print ''
             f.write('Report ID# %d\n' % id_num)
             f.write('{:>25} {:>20}-\n'.format('--Topics--', '--Proportion-'))
             for i in range(N):
-                line = '{:>25} {:>20}%\n'.format(ordered_labels[i][0],
-                                                 round(100 *
-                                                       ordered_labels[i][1],
-                                                       2))
+                label = ordered_labels[i][0]
+                probability = round(100 * ordered_labels[i][1], 2)
+                line = '{:>25} {:>20}%\n'.format(label, probability)
                 f.write(line)
             f.write('\n')
 
-    # Save ENB topics as tags
-    # enb_files_list = '../enb/sw_enb_reports_filenames.txt'
-    # with open(enb_files_list, 'r') as f:
-    #     files = f.readlines()
-    # enb_files = map(str.rstrip, files)
-    # for id_num, ordered_labels in ranked_labels:
-    #     with open('sw_enb_tags/' + enb_files[id_num] + '.tags', 'w') as f:
-    #         for i in range(N):
-    #             f.write(ordered_labels[i][0] + '\n')
-
-    # Print counts for # of documents with each label in position 1:3
+    # Write counts for # of documents with each label in position 1:N
+    N = 3
     with open(output_folder + '/TOP_3_TOPICS_COUNTS.txt', 'w') as f:
+        label_set = [label for label in topics]
         for N in range(3):
             label_counts = []
-            for label in label_index:
+            for label in label_set:
                 count = 0
                 for id_num, ordered_labels in ranked_labels:
                     if label == ordered_labels[N][0]:
                         count += 1
                 label_counts.append(count)
-            print 'TOPIC COUNTS IN RANK %d' % (N+1)
-            print '{:>25} {:>15}'.format('Topic', '# of Reports')
-            print '{:>25} {:>15}'.format('-----', '------------')
-            ordered_label_counts = sorted(zip(label_index, label_counts),
-                                          key=lambda t: t[1], reverse=True)
-            for label, count in ordered_label_counts:
-                print '{:>25} {:>15}'.format(label, count)
-            print ''
-
             f.write('TOPIC COUNTS IN RANK %d\n' % (N+1))
             f.write('{:>25} {:>15}\n'.format('Topic', '# of Reports'))
             f.write('{:>25} {:>15}\n'.format('-----', '------------'))
-            ordered_label_counts = sorted(zip(label_index, label_counts),
+            ordered_label_counts = sorted(zip(label_set, label_counts),
                                           key=lambda t: t[1], reverse=True)
             for label, count in ordered_label_counts:
                 f.write('{:>25} {:>15}\n'.format(label, count))
             f.write('\n')
 
-    # Print Top N terms for topics
+    # Write Top N terms for topics
     N = 50
-    with open(output_folder + '/TOPICS_TOP_' + str(N) + '.txt', 'w') as f:
-    # with open('TOPICS_TOP_50.txt', 'w') as f:
+    with open(output_folder + '/TOPICS_TOP_' + str(N) + '.csv', 'w') as f:
         for topic_label in topics:
             topic = topics[topic_label]
             topic_count = 0
@@ -769,24 +783,30 @@ def show_inference_results(topics, ranked_labels, output_folder):
             topic_data = [(term, 100*topic[term]/topic_count)
                           for term in topic]
             ordered_topic = sorted(topic_data, key=lambda t: t[1],
-                                         reverse=True)
-            print topic_label.upper()
-            print '{:>40} {:>15}'.format('Term', 'Probability')
-            print '{:>40} {:>15}'.format('----', '-----------')
+                                   reverse=True)
+            f.write('{0},\n'.format(topic_label.upper()))
+            f.write('{0},{1}\n'.format('Term', 'Probability'))
             for i in range(N):
-                print '{:>40} {:>15}%'.format(ordered_topic[i][0],
-                                             round(ordered_topic[i][1], 2))
-            print ''
-            print ''
-            f.write(topic_label.upper()+'\n')
-            f.write('{:>40} {:>15}\n'.format('Term', 'Probability'))
-            f.write('{:>40} {:>15}\n'.format('----', '-----------'))
-            for i in range(N):
-                f.write('{:>40} {:>15}%\n'.format(ordered_topic[i][0],
-                                                  round(ordered_topic[i][1],
-                                                        2)))
-            f.write('\n\n')
-    return topics, ranked_labels
+                term = ordered_topic[i][0]
+                prob = round(ordered_topic[i][1], 2)
+                f.write('{0},{1}%\n'.format(term, prob))
+            f.write(',\n,\n')
+
+
+def write_document_topic_tags(document_filepaths, ranked_labels,
+                              output_folder, top_n):
+    # Document names should correspond 1-to-1 with ranked_labels
+    document_names = [ntpath.basename(filepath)
+                      for filepath in document_filepaths]
+    for id_num, ordered_labels in ranked_labels:
+        doc_name = document_names[id_num]
+        output_file = output_folder + doc_name + '.tags'
+        with open(output_file, 'w') as f:
+            for i in range(top_n):
+                label = ordered_labels[i][0]
+                probability = ordered_labels[i][1]
+                line = '{0},{1}\n'.format(label, probability)
+                f.write(line)
 
 
 def iterative_llda():
@@ -796,19 +816,21 @@ def iterative_llda():
 def run_for_scientific_articles():
     # Set up file paths and names
     articles_file = '../sciencewise/scientific_articles_17k.pickle'
+    kpex_file = '../sciencewise/kpex_data_17k.pickle'
+    articles_file = '../sciencewise/scientific_articles_3.5k.pickle'
+    kpex_file = '../sciencewise/kpex_data_3.5k.pickle'
     # taxonomy_file = '../knowledge_base/twitter_ontology.csv'
     taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
     label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
-    kpex_file = '../sciencewise/kpex_data_17k.pickle'
     kpex_variants_file = None
-    training_file = '../work/TRAIN'
-    testing_file = '../work/TEST'
+    training_file = '../work/TRAIN.llda'
+    testing_file = '../work/TEST.llda'
     tmt_file = 'tmt-0.4.0.jar'
     llda_learn_script = '6-llda-learn.scala'
     llda_infer_script = '7b-lda-infer.scala'
-    model_path = '../work/model'
+    model_path = '../work/model/'
     inference_file = '../work/inferences.tsv'
-    work_folder = '../work'
+    work_folder = '../work/'
 
     # Load scientific articles and KPEX data
     with open(kpex_file, 'r') as f:
@@ -816,16 +838,30 @@ def run_for_scientific_articles():
     with open(articles_file) as f:
         scientific_articles = pickle.load(f)
 
-    # Prepare other data for LLDA now
+    # Prepare taxonomy and corpus
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=False)
     corpus, underscores = process_scientific_articles(scientific_articles,
                                                       kpex_data,
                                                       taxonomy,
-                                                      threshold=0)
+                                                      threshold=3)
+    with open(work_folder + 'corpus', 'w') as f:
+        pickle.dump(corpus, f)
+    with open(work_folder + 'taxonomy', 'w') as f:
+        pickle.dump(taxonomy, f)
+    with open(work_folder + 'underscores', 'w') as f:
+        pickle.dump(topics, f)
+
+    # Get label set and label assignments
     label_taxonomy = prepare_taxonomy(label_taxonomy_file, cluster=True)
     labelset = create_labelset(label_taxonomy, [], corpus,
                                threshold=0)
     labels = assign_labels(labelset, label_taxonomy, corpus)
+    with open(work_folder + 'label_taxonomy', 'w') as f:
+        pickle.dump(topics, f)
+    with open(work_folder + 'labelset', 'w') as f:
+        pickle.dump(labelset, f)
+    with open(work_folder + 'labels', 'w') as f:
+        pickle.dump(labels, f)
 
     # Train LLDA
     write_data_set(corpus, labels, training_file, semisupervised=False)
@@ -838,28 +874,12 @@ def run_for_scientific_articles():
     topics, ranked_labels = process_inference_results(model_path,
                                                       inference_file,
                                                       underscores)
-    show_inference_results(topics, ranked_labels, 'test')
+    write_inference_results(topics, ranked_labels, work_folder)
 
-    # Save all working data
-    with open(work_folder + '/corpus', 'w') as f:
-        pickle.dump(corpus, f)
-    with open(work_folder + '/labelset', 'w') as f:
-        pickle.dump(labelset, f)
-    with open(work_folder + '/labels', 'w') as f:
-        pickle.dump(labels, f)
-    with open(work_folder + '/taxonomy', 'w') as f:
-        pickle.dump(taxonomy, f)
-    with open(work_folder + '/frequencies', 'w') as f:
-        pickle.dump(frequencies, f)
-    with open(work_folder + '/synonyms', 'w') as f:
-        pickle.dump(synonyms, f)
-    with open(work_folder + '/topics', 'w') as f:
+    # Save inference data
+    with open(work_folder + 'topics', 'w') as f:
         pickle.dump(topics, f)
-    with open(work_folder + '/ranked_labels', 'w') as f:
-        pickle.dump(topics, f)
-    with open(work_folder + '/underscores', 'w') as f:
-        pickle.dump(topics, f)
-    with open(work_folder + '/label_taxonomy', 'w') as f:
+    with open(work_folder + 'ranked_labels', 'w') as f:
         pickle.dump(topics, f)
 
 
@@ -870,14 +890,14 @@ def run_for_enb_reports():
     label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
     kpex_concepts_file = '../enb/enb_corpus_kpex.kpex_n9999.txt'
     kpex_variants_file = None
-    training_file = '../work/TRAIN_enb_concepts_and_kpex'
-    testing_file = '../work/TEST_enb_concepts_and_kpex'
+    training_file = '../work/TRAIN'
+    testing_file = '../work/TEST'
     tmt_file = 'tmt-0.4.0.jar'
     llda_learn_script = '6-llda-learn.scala'
     llda_infer_script = '7b-lda-infer.scala'
-    model_path = '../work/llda_model'
+    model_path = '../work/llda_model/'
     inference_file = '../work/llda_inferences.tsv'
-    work_folder = '../work'
+    work_folder = '../work/'
 
     # Prepare data for LLDA
     taxonomy = prepare_taxonomy(taxonomy_file, cluster=True)
@@ -898,29 +918,31 @@ def run_for_enb_reports():
     write_data_set(corpus, labels, testing_file, semisupervised=True)
     llda_infer(tmt_file, llda_infer_script, model_path, testing_file,
                inference_file)
-    topics, ranked_labels = show_inferences(model_path, inference_file,
-                                            underscores, work_folder)
+    topics, ranked_labels = process_inference_results(model_path,
+                                                      inference_file,
+                                                      underscores)
+    write_inference_results(topics, ranked_labels, work_folder)
 
     # Save all working data
-    with open(work_folder + '/corpus', 'w') as f:
+    with open(work_folder + 'corpus', 'w') as f:
         pickle.dump(corpus, f)
-    with open(work_folder + '/labelset', 'w') as f:
+    with open(work_folder + 'labelset', 'w') as f:
         pickle.dump(labelset, f)
-    with open(work_folder + '/labels', 'w') as f:
+    with open(work_folder + 'labels', 'w') as f:
         pickle.dump(labels, f)
-    with open(work_folder + '/taxonomy', 'w') as f:
+    with open(work_folder + 'taxonomy', 'w') as f:
         pickle.dump(taxonomy, f)
-    with open(work_folder + '/frequencies', 'w') as f:
+    with open(work_folder + 'frequencies', 'w') as f:
         pickle.dump(frequencies, f)
-    with open(work_folder + '/synonyms', 'w') as f:
+    with open(work_folder + 'synonyms', 'w') as f:
         pickle.dump(synonyms, f)
-    with open(work_folder + '/topics', 'w') as f:
+    with open(work_folder + 'topics', 'w') as f:
         pickle.dump(topics, f)
-    with open(work_folder + '/ranked_labels', 'w') as f:
+    with open(work_folder + 'ranked_labels', 'w') as f:
         pickle.dump(topics, f)
-    with open(work_folder + '/underscores', 'w') as f:
+    with open(work_folder + 'underscores', 'w') as f:
         pickle.dump(topics, f)
-    with open(work_folder + '/label_taxonomy', 'w') as f:
+    with open(work_folder + 'label_taxonomy', 'w') as f:
         pickle.dump(topics, f)
 
 
