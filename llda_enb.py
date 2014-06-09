@@ -543,8 +543,7 @@ def prepare_taxonomy(fname, cluster=False):
     return taxonomy
 
 
-def create_labelset(taxonomy, frequencies, corpus, threshold=0,
-                    mode='count'):
+def create_labelset(taxonomy, frequencies, corpus, threshold=0):
     """ Create list of frequently occurring concepts in the corpus to be used
     as labels.
 
@@ -561,58 +560,43 @@ def create_labelset(taxonomy, frequencies, corpus, threshold=0,
     """
     # Filter by count or frequency
     labelset = []
+    label_count = []
     fd = FreqDist(reduce(list.__add__, corpus))
     print ''
     print 'Concept : # occurrences'
     print '___________-'
     if type(taxonomy) is dict:
         for concept in taxonomy:
-            if mode is 'count':
-                terms_count = 0
-                for term in taxonomy[concept]:
-                    # Prefer to use KPEX frequency count rather than NLTK
-                    if term in frequencies:
-                        terms_count += frequencies[term]
-                    else:
-                        terms_count += fd[term]
-                print concept, ': #', terms_count
-                if terms_count >= threshold:
-                    labelset.append(concept)
-            elif mode is 'freq':
-                # FIXME: Doesn't do frequency yet for KPEX
-                terms_freq = sum([fd.freq(term) for term in concept])
-                if terms_freq >= threshold:
-                    labelset.append(concept)
-    elif type(taxonomy) is list:
-        if mode is 'count':
-            for concept in taxonomy:
-                occurrences = 0
+            terms_count = 0
+            for term in taxonomy[concept]:
                 # Prefer to use KPEX frequency count rather than NLTK
-                if concept in frequencies:
-                    occurrences = frequencies[concept]
+                if term in frequencies:
+                    terms_count += frequencies[term]
                 else:
-                    occurrences = fd[concept]
-                print concept, ': #', occurrences
-                if occurrences >= threshold:
-                    labelset.append(concept)
-        elif mode is ' freq':
-            for concept in taxonomy:
-                # FIXME: doesn't  do frequency yet for KPEX
-                concept_freq = fd.freq(concept)
-                if concept_freq >= threshold:
-                    labelset.append(concept)
-        else:
-            warnings.warn('Mode option is invalid.')
-    else:
-        warnings.warn('Taxonomy is not a valid data type.')
+                    terms_count += fd[term]
+            label_count.append((concept, terms_count))
+            if terms_count >= threshold:
+                labelset.append(concept)
+    elif type(taxonomy) is list:
+        for concept in taxonomy:
+            occurrences = 0
+            # Prefer to use KPEX frequency count rather than NLTK
+            if concept in frequencies:
+                occurrences = frequencies[concept]
+            else:
+                occurrences = fd[concept]
+            label_count.append((concept, occurrences))
+            if occurrences >= threshold:
+                labelset.append(concept)
 
     # Remove any duplicates, just in case
+    label_count = list(set(label_count))
     labelset = list(set(labelset))
     # Remove 'common' if present, as this is a reserved label for the Shuyo
     # implementation of L-LDA
     if 'common' in labelset:
             labelset.remove('common')
-    return labelset
+    return labelset, label_count
 
 
 def assign_labels(labelset, taxonomy, corpus):
@@ -815,22 +799,18 @@ def iterative_llda():
 
 def run_for_scientific_articles():
     # Set up file paths and names
-    articles_file = '../sciencewise/scientific_articles_17k.pickle'
-    kpex_file = '../sciencewise/kpex_data_17k.pickle'
-    articles_file = '../sciencewise/scientific_articles_3.5k.pickle'
-    kpex_file = '../sciencewise/kpex_data_3.5k.pickle'
-    # taxonomy_file = '../knowledge_base/twitter_ontology.csv'
+    articles_file = '../sciencewise/scientific_articles_100.pickle'
+    kpex_file = '../sciencewise/kpex_data_100.pickle'
     taxonomy_file = '../knowledge_base/sciencewise_concepts_27-may.csv'
     label_taxonomy_file = '../knowledge_base/twitter_ontology.csv'
-    kpex_variants_file = None
-    training_file = '../work/TRAIN.llda'
-    testing_file = '../work/TEST.llda'
     tmt_file = 'tmt-0.4.0.jar'
     llda_learn_script = '6-llda-learn.scala'
     llda_infer_script = '7b-lda-infer.scala'
-    model_path = '../work/model/'
-    inference_file = '../work/inferences.tsv'
     work_folder = '../work/'
+    training_file = work_folder + 'TRAIN.llda'
+    testing_file = work_folder + 'TEST.llda'
+    model_path = work_folder + 'model/'
+    inference_file = work_folder + 'inferences.tsv'
 
     # Load scientific articles and KPEX data
     with open(kpex_file, 'r') as f:
@@ -849,17 +829,19 @@ def run_for_scientific_articles():
     with open(work_folder + 'taxonomy', 'w') as f:
         pickle.dump(taxonomy, f)
     with open(work_folder + 'underscores', 'w') as f:
-        pickle.dump(topics, f)
+        pickle.dump(underscores, f)
 
     # Get label set and label assignments
     label_taxonomy = prepare_taxonomy(label_taxonomy_file, cluster=True)
-    labelset = create_labelset(label_taxonomy, [], corpus,
-                               threshold=0)
+    labelset, label_count = create_labelset(label_taxonomy, [], corpus,
+                                            threshold=0)
     labels = assign_labels(labelset, label_taxonomy, corpus)
     with open(work_folder + 'label_taxonomy', 'w') as f:
-        pickle.dump(topics, f)
+        pickle.dump(label_taxonomy, f)
     with open(work_folder + 'labelset', 'w') as f:
         pickle.dump(labelset, f)
+    with open(work_folder + 'label_count', 'w') as f:
+        pickle.dump(label_count, f)
     with open(work_folder + 'labels', 'w') as f:
         pickle.dump(labels, f)
 
@@ -906,8 +888,8 @@ def run_for_enb_reports():
     corpus, underscores = process_enb_reports(enb_file, synonyms, frequencies,
                                          taxonomy, threshold=10)
     label_taxonomy = prepare_taxonomy(label_taxonomy_file, cluster=True)
-    labelset = create_labelset(label_taxonomy, frequencies, corpus,
-                               threshold=10)
+    labelset, label_count = create_labelset(label_taxonomy, frequencies,
+                                            corpus, threshold=10)
     labels = assign_labels(labelset, label_taxonomy, corpus)
 
     # Train LLDA
@@ -930,6 +912,8 @@ def run_for_enb_reports():
         pickle.dump(labelset, f)
     with open(work_folder + 'labels', 'w') as f:
         pickle.dump(labels, f)
+    with open(work_folder + 'label_count', 'w') as f:
+        pickle.dump(label_count, f)
     with open(work_folder + 'taxonomy', 'w') as f:
         pickle.dump(taxonomy, f)
     with open(work_folder + 'frequencies', 'w') as f:
@@ -939,11 +923,11 @@ def run_for_enb_reports():
     with open(work_folder + 'topics', 'w') as f:
         pickle.dump(topics, f)
     with open(work_folder + 'ranked_labels', 'w') as f:
-        pickle.dump(topics, f)
+        pickle.dump(ranked_labels, f)
     with open(work_folder + 'underscores', 'w') as f:
-        pickle.dump(topics, f)
+        pickle.dump(underscores, f)
     with open(work_folder + 'label_taxonomy', 'w') as f:
-        pickle.dump(topics, f)
+        pickle.dump(label_taxonomy, f)
 
 
 def main():
