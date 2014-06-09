@@ -52,7 +52,7 @@ def serial_factorizer(nums):
 
 def parallel_factorizer(nums, num_threads):
     start = time.time()
-    p = ThreadPool(num_threads)
+    p = Pool(num_threads)
     results = p.map(factorize_naive, nums)
     p.close()
     p.join()
