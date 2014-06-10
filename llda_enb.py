@@ -400,7 +400,7 @@ def sanitize_article(article, kpex, taxonomy, threshold=0):
     return filtered_words
 
 
-def parallel_scientific_articles(scientific_articles, kpex_data, taxonomy,
+def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
                                 threshold=0):
     """ Very similar to the process_enb_reports() except it takes kpex info
     in a different format since there is one KPEX file for every scientific
@@ -420,63 +420,6 @@ def parallel_scientific_articles(scientific_articles, kpex_data, taxonomy,
     corpus = p.map(sanitize, izip(scientific_articles, kpex_data))
     p.close()
     p.join()
-    # Save correspondences between underscored and concatenated version of all
-    # n-grams in the corpus so we can do backwards conversion after LDA
-    all_terms = set(reduce(list.__add__, corpus))
-    underscores = {}
-    for term in all_terms:
-        no_underscores = term.replace('_', '')
-        underscores[no_underscores] = term
-    return corpus, underscores
-
-
-def process_scientific_articles(scientific_articles, kpex_data, taxonomy,
-                                threshold=0):
-    """ Very similar to the process_enb_reports() except it takes kpex info
-    in a different format since there is one KPEX file for every scientific
-    article as compared to one KPEX file for all ENB reports.
-
-    This function is separate because it may be later than the scientific
-    articles require a different set of pre-processing steps.
-    """
-
-    stop = stopwords.words('english')
-    corpus = []
-    for article, kpex in zip(scientific_articles, kpex_data):
-        # "Unpack" and rename KPEX data items
-        frequencies = kpex[0]
-        synonyms = kpex[1]
-        # Remove non-ASCII words and characters:
-        article = remove_non_ascii(article)  # TODO: needed for articles?
-        # Replace synonyms with main term (according to KPEX) in both corpus
-        # and taxonomy (i.e. make one "standard" form)
-        article = replace_synonyms(synonyms, frequencies, article,
-                                  threshold=threshold)
-        assert type(taxonomy) is dict or list
-        if type(taxonomy) is dict:
-            for concept in taxonomy:
-                for index, term in enumerate(concept):
-                    if term in synonyms:
-                        taxonomy[concept][index] = synonyms[term]
-        elif type(taxonomy) is list:
-            for index, concept in enumerate(taxonomy):
-                if concept in synonyms:
-                    taxonomy[index] = synonyms[concept]
-        # Chain unigrams into n-grams (ontology first, THEN, KPEX terms)
-        article = make_taxonomic_ngrams(taxonomy, article)
-        article = make_kpex_ngrams(frequencies, article,
-                                   threshold=threshold)
-        doc = []
-        # Remove stop words, non-words. Lemmatize the rest.
-        for sent in sent_tokenize(article):
-            doc += [word for word in word_tokenize(sent) if word not in stop]
-        words = [lemmatize_word(x) for x in doc
-                 if x[0] in string.ascii_letters]
-        # Filter words not in taxonomy or KPEX terms list
-        filtered_words = filter_terms(words, taxonomy=taxonomy,
-                                      frequencies=frequencies,
-                                      threshold=threshold)
-        corpus.append(filtered_words)
     # Save correspondences between underscored and concatenated version of all
     # n-grams in the corpus so we can do backwards conversion after LDA
     all_terms = set(reduce(list.__add__, corpus))
@@ -774,19 +717,19 @@ def llda_infer(tmt, script, model_path, target_file, output_file):
 
 def process_inference_results(model_path, inference_file, underscores):
     # Process results
-    command = ['cp', model_path + '/01500/topic-term-distributions.csv.gz',
-               model_path + '/01500/results.csv.gz']
+    command = ['cp', model_path + '01500/topic-term-distributions.csv.gz',
+               model_path + '01500/results.csv.gz']
     subprocess.call(command)
     command = ['gunzip', model_path + '/01500/results.csv.gz']
     subprocess.call(command)
-    with open(model_path + '/01500/term-index.txt', 'r') as f:
+    with open(model_path + '01500/term-index.txt', 'r') as f:
         terms = f.readlines()
         terms = map(str.rstrip, terms)
-    with open(model_path + '/01500/label-index.txt', 'r') as f:
+    with open(model_path + '01500/label-index.txt', 'r') as f:
         label_index = f.readlines()
         label_index = map(str.rstrip, label_index)
     topics = dict()
-    with open(model_path + '/01500/results.csv', 'r') as f:
+    with open(model_path + '01500/results.csv', 'r') as f:
         data = csv.reader(f, delimiter=',')
         data = [row for row in data]
         for i, label in enumerate(label_index):
@@ -814,7 +757,7 @@ def write_inference_results(topics, ranked_labels, output_folder):
 
     # Write top N labels for each report
     N = 3
-    with open(output_folder + '/TOP_3_TOPICS_PER_ENB_DOCUMENT.txt', 'w') as f:
+    with open(output_folder + 'TOP_3_TOPICS_PER_ENB_DOCUMENT.txt', 'w') as f:
         for id_num, ordered_labels in ranked_labels:
             f.write('Report ID# %d\n' % id_num)
             f.write('{:>25} {:>20}-\n'.format('--Topics--', '--Proportion-'))
@@ -827,7 +770,7 @@ def write_inference_results(topics, ranked_labels, output_folder):
 
     # Write counts for # of documents with each label in position 1:N
     N = 3
-    with open(output_folder + '/TOP_3_TOPICS_COUNTS.txt', 'w') as f:
+    with open(output_folder + 'TOP_3_TOPICS_COUNTS.txt', 'w') as f:
         label_set = [label for label in topics]
         for N in range(3):
             label_counts = []
@@ -848,7 +791,7 @@ def write_inference_results(topics, ranked_labels, output_folder):
 
     # Write Top N terms for topics
     N = 50
-    with open(output_folder + '/TOPICS_TOP_' + str(N) + '.csv', 'w') as f:
+    with open(output_folder + 'TOPICS_TOP_' + str(N) + '.csv', 'w') as f:
         for topic_label in topics:
             topic = topics[topic_label]
             topic_count = 0
