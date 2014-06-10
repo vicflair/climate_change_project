@@ -457,8 +457,8 @@ def sanitize_enb_report(report, synonyms, frequencies, taxonomy,
     for sent in sent_tokenize(report):
         doc += [word for word in word_tokenize(sent)
                 if word not in stopwords.words('english')]
-    words = [lemmatize_word(x) for x in doc
-             if x[0] in string.ascii_letters]
+    words = (lemmatize_word(x) for x in doc
+             if x[0] in string.ascii_lfetters)
     # Filter words not in taxonomy or KPEX terms list
     filtered_words = filter_terms(words, taxonomy=taxonomy,
                                   frequencies=frequencies,
@@ -508,6 +508,7 @@ def process_enb_reports(enb_file, synonyms, frequencies, taxonomy,
 def filter_terms(document, taxonomy=None, frequencies=None, threshold=0):
     # Keep words only in KPEX terms or ontology, depending on whether they
     # are provided as input
+    # TODO: This needs to be optimized for speed
     # Create list of words to keep
     keep_words = []
     if frequencies:
@@ -515,8 +516,8 @@ def filter_terms(document, taxonomy=None, frequencies=None, threshold=0):
                       if frequencies[term] > threshold]
     if taxonomy:
         if type(taxonomy) is dict:
-            for concept in taxonomy:
-                keep_words += taxonomy[concept]
+            all_taxonomy_words = (taxonomy[concept] for concept in taxonomy)
+            keep_words += reduce(list.__add__, all_taxonomy_words)
         elif type(taxonomy) is list:
             keep_words += taxonomy
         else:

@@ -1,5 +1,8 @@
 import csv
 import sys
+import time
+from multiprocessing import Pool
+from functools import partial
 from llda_enb import remove_non_ascii, make_taxonomic_ngrams, lemmatize_word, \
     filter_terms
 from nltk.tokenize import sent_tokenize, word_tokenize
@@ -9,30 +12,46 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 csv.field_size_limit(sys.maxsize)
 
 
+def unpack_f(zipped_arguments, fcn):
+    """ Intended to unpack zipped arguments, not necessarily iterable, to
+    convert a f([x, y, z]) call to the f(x, y, z). This allows calls to
+    multiprocessing.Pool().map() to take multiple iterable arguments.
+    """
+    return fcn(*zipped_arguments)
+
+
+def sanitize_enb_doc(report, taxonomy):
+    # Remove non-ASCII characters
+    report = remove_non_ascii(report)
+    # Chain uni-grams into n-grams
+    assert type(taxonomy) is dict
+    report = make_taxonomic_ngrams(taxonomy, report)
+    # Separate into sentences and remove stop words, non-words, and
+    # otherwise all words not in taxonomy
+    # TODO: Need to optimize this segment
+    doc = []
+    for sent in sent_tokenize(report):
+        sent_words = [word for word in word_tokenize(sent)]
+        filtered_words = filter_terms(sent_words, taxonomy=taxonomy,
+                                      frequencies=None, threshold=0)
+        doc.append(filtered_words)
+    return doc
+
+
 def detect_enb_concepts(enb_file, taxonomy):
     """ Get corpus which is a list of sentences, where each sentence is
     represented as a list of words
     """
-    corpus = []
     # Get ENB reports
     with open(enb_file, 'r') as f:
         data = csv.reader(f, delimiter='\t')
         reports = [row[7].lower() for row in data]
-    for report in reports:
-        # Remove non-ASCII characters
-        report = remove_non_ascii(report)
-        # Chain uni-grams into n-grams
-        assert type(taxonomy) is dict
-        report = make_taxonomic_ngrams(taxonomy, report)
-        # Separate into sentences and remove stop words, non-words, and
-        # otherwise all words not in taxonomy
-        doc = []
-        for sent in sent_tokenize(report):
-            sent_words = [word for word in word_tokenize(sent)]
-            filtered_words = filter_terms(sent_words, taxonomy=taxonomy,
-                                          frequencies=None, threshold=0)
-            doc.append(filtered_words)
-        corpus.append(doc)
+    # Sanitize
+    par_sanitize = partial(sanitize_enb_doc, taxonomy=taxonomy)
+    p = Pool(4)
+    corpus = p.map(par_sanitize, reports)
+    p.close()
+    p.join()
     return corpus
 
 
