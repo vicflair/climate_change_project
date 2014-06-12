@@ -35,7 +35,7 @@
       <file leaf-file-name="manual_detection.py" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/manual_detection.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="58" column="59" selection-start="2165" selection-end="2165" vertical-scroll-proportion="0.8450502" vertical-offset="455" max-vertical-offset="4860">
+            <state line="188" column="0" selection-start="7262" selection-end="7262" vertical-scroll-proportion="0.82639885" vertical-offset="2808" max-vertical-offset="4860">
               <folding>
                 <element signature="e#0#10#0" expanded="true" />
               </folding>
@@ -771,7 +771,7 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/manual_detection.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="58" column="59" selection-start="2165" selection-end="2165" vertical-scroll-proportion="0.8450502" vertical-offset="455" max-vertical-offset="4860">
+        <state line="188" column="0" selection-start="7262" selection-end="7262" vertical-scroll-proportion="0.82639885" vertical-offset="2808" max-vertical-offset="4860">
           <folding>
             <element signature="e#0#10#0" expanded="true" />
           </folding>

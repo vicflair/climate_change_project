@@ -180,10 +180,10 @@ def write_concept_results(doc_concept_pairs, pair_freq, concept_taxonomy):
             counts = map(str, pair_freq[i])
             f.write(line.format(concepts_list[i], *counts)+'\n')
     # Write all extracted concept pairs for every document
-    with open('../work/manual_concept_pairs_per_doc.csv', 'w') as f:
-        f.write('ID, CONCEPT PAIRS\n')
+    with open('../work/manual_concept_pairs_per_doc.tsv', 'w') as f:
+        f.write('ID\tCONCEPT PAIRS\n')
         for i, doc in enumerate(doc_concept_pairs):
-            line = '{}, ' + ' '.join(['{}']*len(doc)) + '\n'
+            line = '{}\t' + ' '.join(['{}']*len(doc)) + '\n'
             f.write(line.format(i, *doc))
 
 
