@@ -14,12 +14,16 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 csv.field_size_limit(sys.maxsize)
 
 
-def capitalize_text(text, taxonomy, marker=None):
+def capitalize_text(text, taxonomy, marker=''):
+    """ Capitalize and mark, i.e. surround with special characters as
+    identifiers, all taxonomic terms in a text, using a regular expressions for
+    search.
+    """
     terms = []
     for concept in taxonomy:
         terms += taxonomy[concept]
     for term in terms:
-        text = capitalize_term(text, term, marker)
+        text = capitalize_term_re(text, term, marker)
     return text
 
 
@@ -40,19 +44,36 @@ def capitalize_term(text, term, marker=None):
     return text
 
 
-def write_annotated_docs(doc_file, taxonomy_file, marker=None):
+def capitalize_term_re(text, term, marker=''):
+    """ Returns text with input term capitalized and marked, e.g. if term =
+    'flower' and marker = '$', then:
+    'Roses are the best flowers.' --> 'Roses are the best $FLOWERS$s.'
+    """
+    # TODO: Copy this search method to concept/topic detectoin functions
+    assert type(marker) is str
+    # Marked term is capitalized taxonomic term with 's' afterwards if plural
+    marked_term = ' ' + marker + term.upper() + marker + r'\1'
+    # Search term is taxonomic term without underscores, optionally with a
+    # terminal 's' (for plurals), and is case insensitive
+    search_term = re.compile(' ' + term.replace('_', ' ') + '( |s )', re.I)
+    annotated_text = re.sub(search_term, marked_term, text)
+    return annotated_text
+
+
+def write_annotated_docs(doc_file, taxonomy_file, marker=''):
     # Capitalize taxonomic concept occurrences in original texts
     taxonomy = load_taxonomy(taxonomy_file)
     with open(doc_file, 'r') as f:
         data = csv.reader(f, delimiter='\t')
         docs = [row[7] for row in data]
-    cap_text = partial(capitalize_text, taxonomy=taxonomy)
+    cap_text = partial(capitalize_text, taxonomy=taxonomy, marker=marker)
     annotated_docs = map(cap_text, docs)
     # Write to file
     with open('../work/annotated_docs.csv', 'w') as f:
         f.write('ID#, ANNOTATED TEXT\n')
         for i, doc in enumerate(annotated_docs):
             f.write('{0},{1}\n'.format(i, doc))
+    return annotated_docs
 
 
 def load_taxonomy(filename):
