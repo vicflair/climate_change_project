@@ -1,17 +1,24 @@
 import csv
+import pickle
 import re
 import sys
 import time
 from itertools import combinations
-from llda_enb import lemmatize_word, filter_terms, make_taxonomic_ngrams, \
-    remove_non_ascii
 from multiprocessing import Pool
 from functools import partial
-from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.tokenize import sent_tokenize
 
 
 # Allow larger entries in CSV files, e.g. for scientific articles
 csv.field_size_limit(sys.maxsize)
+
+
+def regex_search(term):
+    # Search term is taxonomic term without underscores, optionally with a
+    # terminal 's' (for plurals), and is case insensitive
+    search_term = re.compile(r'(\b)' + term.replace('_', ' ') + r'(\b|s\b)',
+                             re.I)
+    return search_term
 
 
 def capitalize_text(text, taxonomy, marker=''):
@@ -27,23 +34,6 @@ def capitalize_text(text, taxonomy, marker=''):
     return text
 
 
-def capitalize_term(text, term, marker=None):
-    matches = [m.start() for m in
-               re.finditer(' ' + term.replace('_', ' ') + ' ',
-                           text.lower())]
-    matches = sorted(matches, reverse=True)
-    if marker:
-        assert type(marker) is str
-        for match in matches:
-            marked_term = ' ' + marker + term.upper() + marker
-            text = text[0:match] + marked_term + text[match+len(term)+1:]
-    else:
-        matches = map(lambda x: x+1, matches)
-        for match in matches:
-            text = text[0:match] + term.upper() + text[match+len(term):]
-    return text
-
-
 def capitalize_term_re(text, term, marker=''):
     """ Returns text with input term capitalized and marked, e.g. if term =
     'flower' and marker = '$', then:
@@ -51,29 +41,43 @@ def capitalize_term_re(text, term, marker=''):
     """
     # TODO: Copy this search method to concept/topic detectoin functions
     assert type(marker) is str
+    search_term = regex_search(term)
     # Marked term is capitalized taxonomic term with 's' afterwards if plural
-    marked_term = ' ' + marker + term.upper() + marker + r'\1'
-    # Search term is taxonomic term without underscores, optionally with a
-    # terminal 's' (for plurals), and is case insensitive
-    search_term = re.compile(' ' + term.replace('_', ' ') + '( |s )', re.I)
+    marked_term = r'\1' + marker + term.upper() + marker + r'\2'
     annotated_text = re.sub(search_term, marked_term, text)
     return annotated_text
 
 
-def write_annotated_docs(doc_file, taxonomy_file, marker=''):
+def write_annotated_docs(doc_file, concepts_file, topics_file,
+                         marker=''):
     # Capitalize taxonomic concept occurrences in original texts
-    taxonomy = load_taxonomy(taxonomy_file)
+    concept_taxonomy = load_taxonomy(concepts_file)
+    topic_taxonomy = load_taxonomy(topics_file)
     with open(doc_file, 'r') as f:
         data = csv.reader(f, delimiter='\t')
         docs = [row[7] for row in data]
-    cap_text = partial(capitalize_text, taxonomy=taxonomy, marker=marker)
-    annotated_docs = map(cap_text, docs)
+    cap_concepts = partial(capitalize_text, taxonomy=concept_taxonomy,
+                           marker=marker)
+    annotated_docs = map(cap_concepts, docs)
+    cap_topics = partial(capitalize_text, taxonomy=topic_taxonomy, marker=marker)
+    annotated_docs = map(cap_topics, annotated_docs)
     # Write to file
-    with open('../work/annotated_docs.csv', 'w') as f:
-        f.write('ID#, ANNOTATED TEXT\n')
+    with open('../work/annotated_docs.tsv', 'w') as f:
+        f.write('ID#\tANNOTATED TEXT\n')
         for i, doc in enumerate(annotated_docs):
-            f.write('{0},{1}\n'.format(i, doc))
+            f.write('{0}\t{1}\n'.format(i, doc))
     return annotated_docs
+
+
+def load_corpus(filename):
+    if filename.endswith('.csv'):
+        with open(filename, 'r') as f:
+            data = csv.reader(f, delimiter='\t')
+            corpus = [row[7] for row in data]
+    elif filename.endswith('.pickle'):
+        with open(filename, 'r') as f:
+            corpus = pickle.load(f)
+    return corpus
 
 
 def load_taxonomy(filename):
@@ -89,39 +93,95 @@ def load_taxonomy(filename):
     return taxonomy
 
 
-def sanitize_enb_doc(report, taxonomy):
-    # Remove non-ASCII characters
-    report = remove_non_ascii(report)
-    # Chain uni-grams into n-grams
-    assert type(taxonomy) is dict
-    report = make_taxonomic_ngrams(taxonomy, report)
-    # Separate into sentences and remove stop words, non-words, and
-    # otherwise all words not in taxonomy
-    # TODO: Need to optimize this segment
-    doc = []
-    for sent in sent_tokenize(report):
-        sent_words = [lemmatize_word(word) for word in word_tokenize(sent)]
-        filtered_words = filter_terms(sent_words, taxonomy=taxonomy,
-                                      frequencies=None, threshold=0)
-        doc.append(filtered_words)
-    return doc
+def get_weight(sections, term_pos):
+    """ Get weight for a particular occurrence of a term in a text:
+     Title: 8x
+     Abstract: 4x
+     H1: 2x
+     H2: 2x
+     H3: 2x
+     Conclusion: 2x
+     Body: 2x
+     Caption: 1x
+     Bibliography: 1x
 
+     sections is the indices of all 4 sections, in aforementioned order
+     term_pos is the index of the term's position in the text string.
 
-def detect_enb_concepts(enb_file, taxonomy):
-    """ Get corpus which is a list of sentences, where each sentence is
-    represented as a list of words
+     We check, in reverse order (bibliography to title) whether term_pos >
+     section_pos. The first section for which this is true is the section to
+     which the term belongs.
     """
-    # Get ENB reports
-    with open(enb_file, 'r') as f:
-        data = csv.reader(f, delimiter='\t')
-        reports = [row[7].lower() for row in data]
+    # Set weights for each section
+    weights = [1, 1, 2, 2, 2, 2, 2, 4, 8]
+    # Working from end of text, determine in which section the term lies, and
+    # apply weight accordingly
+    weight = 1
+    for i, section in enumerate(sections):
+        if (term_pos > section) and (section != -1):
+            weight = weights[i]
+            break
+    return weight
+
+
+def find_sections(doc):
+    # Find section headers, to use as reference for weighting
+    title = doc.find('::TITLE::')
+    abstract = doc.find('::ABSTRACT::')
+    h1 = doc.find('::H1::')
+    h2 = doc.find('::H2::')
+    h3 = doc.find('::H3::')
+    conclusion = doc.find('::CONCLUSION::')
+    body = doc.find('::BODY::')
+    caption = doc.find('::CAPTION::')
+    bibliography = doc.find('::BIBLIOGRAPHY::')
+    # Indices of section headers, in reverse order (according to XML dump)
+    sections = [bibliography, caption, body, conclusion, h3, h2, h1, abstract,
+                title]
+    return sections
+
+
+def detect_sent_concepts(doc, taxonomy):
+    # Get section header locations
+    sections = find_sections(doc)
+    # Build list of all taxonomic terms
+    terms = []
+    for concept in taxonomy:
+        terms += taxonomy[concept]
+    # Detect sentence-specific concepts, and track position in document
+    doc_pos = 0
+    doc_concepts = []
+    for sent in sent_tokenize(doc):
+        sent_concepts = []
+        for term in terms:
+            search_term = regex_search(term)
+            match_pos = [m.start() for m in re.finditer(search_term, sent)]
+            if match_pos:
+                # Assume only one match is valid per sentence.
+                term_pos = match_pos[0] + doc_pos
+                concept = term_to_concept(term, taxonomy)
+                weight = get_weight(sections, term_pos)
+                sent_concepts.append((concept, weight))
+        # Add tuple of unique concepts, i.e. no repeats even if different terms
+        # referring to the same concept appear
+        if sent_concepts:
+            doc_concepts.append(list(set(sent_concepts)))
+        # Increment document position after processing each sentence
+        doc_pos += len(sent)
+    return doc_concepts
+
+
+def detect_corpus_concepts(corpus, taxonomy):
+    """ Get corpus which is nested list of concepts, representing documents
+    and sentences.
+    """
     # Sanitize
-    par_sanitize = partial(sanitize_enb_doc, taxonomy=taxonomy)
+    par_detect = partial(detect_sent_concepts, taxonomy=taxonomy)
     p = Pool(4)
-    corpus = p.map(par_sanitize, reports)
+    corpus_concepts = p.map(par_detect, corpus)
     p.close()
     p.join()
-    return corpus
+    return corpus_concepts
 
 
 def term_to_concept(term, taxonomy):
@@ -130,135 +190,172 @@ def term_to_concept(term, taxonomy):
     return concept_name[0]
 
 
-def get_concept_occurrences(enb_file, concepts_file):
+def combine_weights(uncombined_items):
+    combined_items = []
+    for weighted_item in uncombined_items:
+        # Get weight of every item which matches, or 0 for mismatch
+        weights = map(lambda x: x[1] if x[0] == weighted_item[0] else 0,
+                      uncombined_items)
+        total_weight = sum(weights)
+        # Added item to list of items with combined weights
+        combined_item = (weighted_item[0], total_weight)
+        combined_items.append(combined_item)
+    # Remove duplicates, so each one represents the combined weight
+    combined_items = list(set(combined_items))
+    return combined_items
+
+
+def detect_sent_concept_pairs(doc):
+    """ Given the set of detected concepts in a document's sentences,
+    determine all sentence-specific concept pairs.
+    """
+    sent_pairs = []
+    for sent in doc:
+        # Get n! pairs for all unique concepts if more than 2 concepts
+        combos = list(combinations(sent, 2))
+        # Transform concept combos representation from ((x, w), (y, w)) to the
+        # ((x, y), w) pair form, where x,y are concepts, and w is the weight
+        pairs = []
+        for combo in combos:
+            # Sort pair so that (x,y) and (y,x) are a single form: (x,y)
+            sorted_pair = tuple({combo[0][0], combo[1][0]})
+            weight = combo[0][1]
+            pair = (sorted_pair, weight)
+            pairs.append(pair)
+        sent_pairs.append(pairs)
+    if sent_pairs:
+        sent_pairs = list(reduce(list.__add__, sent_pairs))
+    # Combine weights of all instances of the same concept pair
+    combined_weight_pairs = combine_weights(sent_pairs)
+    return combined_weight_pairs
+
+
+def get_concept_occurrences(corpus_file, concepts_file):
     """ Manual concept vector detection
     """
-    # Get concept vectors
+    # Load corpus and concept vectors
     concept_taxonomy = load_taxonomy(concepts_file)
+    corpus = load_corpus(corpus_file)
     # Process corpus and return only concept terms on a per-document-sentence
-    # basis
-    terms_corpus = detect_enb_concepts(enb_file, concept_taxonomy)
-    # Transform concept-terms representation of corpus to pure concepts
-    doc_concepts = []
-    for doc in terms_corpus:
-        sentences = []
-        for sentence in doc:
-            # Get all unique concepts in each sentence
-            sent_concepts = set([term_to_concept(term, concept_taxonomy)
-                                 for term in sentence])
-            sentences.append(sent_concepts)
-        doc_concepts.append(sentences)
-    # Accumulate list of detected concepts for each sentence
-    sent_concepts = reduce(list.__add__, doc_concepts)
-    # Get all unique sentence-level concept pairs for each document
-    doc_concept_pairs = []
-    for doc in doc_concepts:
-        sentences = []
-        for sent in doc:
-            sent_pairs = list(combinations(sent, 2))
-            sentences.append(sent_pairs)
-        # Don't repeat pairs, even if they occur multiple times in 1 doc
-        unique_doc_pairs = tuple(set(reduce(list.__add__, sentences)))
-        doc_concept_pairs.append(unique_doc_pairs)
+    # level
+    doc_concepts = detect_corpus_concepts(corpus, concept_taxonomy)
+    # Get all sentence-level concept pairs for each document
+    p = Pool(4)
+    doc_pairs = map(detect_sent_concept_pairs, doc_concepts)
+    p.close()
+    p.join()
     # Get sentence-level pair-wise occurrence matrix
-    pair_freq = [[len([i for i, detected in enumerate(sent_concepts)
-                       if concept1 in detected and concept2 in detected])
-                  for concept1 in concept_taxonomy]
-                 for concept2 in concept_taxonomy]
-    write_concept_results(doc_concept_pairs, pair_freq, concept_taxonomy)
-    return doc_concepts
+    sent_pairs = reduce(list.__add__, doc_pairs)
+    pair_counts = combine_weights(sent_pairs)
+    concepts = [c for c in concept_taxonomy]
+    pair_matrix = []
+    for concept1 in concepts:
+        row = []
+        for concept2 in concepts:
+            pair_count = 0
+            for count in pair_counts:
+                if (concept1 in count[0]) and (concept2 in count[0]):
+                    pair_count += count[1]
+            row.append(pair_count)
+        pair_matrix.append(row)
+    # Write results
+    write_concept_results(doc_pairs, pair_matrix, concept_taxonomy)
+    return doc_pairs, pair_matrix
 
 
-def write_concept_results(doc_concept_pairs, pair_freq, concept_taxonomy):
+def write_concept_results(doc_concept_pairs, pair_matrix, concept_taxonomy):
     # Write co-occurrence matrix in csv format
-    matrix_size = len(pair_freq)
+    matrix_size = len(pair_matrix)
     concepts_list = [concept for concept in concept_taxonomy]
-    with open('../work/manual_pairwise_concept_occurrence.csv', 'w') as f:
+    matrix_file = '../work/manual_pairwise_concept_matrix.csv'
+    with open(matrix_file, 'w') as f:
         f.write(','+','.join(concepts_list)+'\n')
         for i in range(matrix_size):
             line = '{:>30},' + '{:>10},'*matrix_size
-            counts = map(str, pair_freq[i])
+            counts = map(str, pair_matrix[i])
             f.write(line.format(concepts_list[i], *counts)+'\n')
+        print 'Wrote to ' + matrix_file
     # Write all extracted concept pairs for every document
-    with open('../work/manual_concept_pairs_per_doc.tsv', 'w') as f:
+    pairs_file = '../work/manual_concept_pairs_per_doc.tsv'
+    with open(pairs_file, 'w') as f:
         f.write('ID\tCONCEPT PAIRS\n')
         for i, doc in enumerate(doc_concept_pairs):
             line = '{}\t' + ' '.join(['{}']*len(doc)) + '\n'
             f.write(line.format(i, *doc))
+        print 'Wrote to ' + pairs_file
 
 
-def get_topic_distributions(enb_file, topics_file):
+def get_topic_distributions(corpus_file, topics_file):
     """ Manual topic vector detection
     """
-    # Get topic vectors
+    # Get topic vectors and corpus
     topic_taxonomy = load_taxonomy(topics_file)
-    topic_sentence_corpus = detect_enb_concepts(enb_file, topic_taxonomy)
-    topic_corpus = map(lambda x: reduce(list.__add__, x),
-                       topic_sentence_corpus)
-    # Get list of repeated topic occurrences for each document
-    detected_topics = [[topic for topic in topic_taxonomy
-                        for term in terms if term in topic_taxonomy[topic]]
-                       for terms in topic_corpus]
+    corpus = load_corpus(corpus_file)
+    sent_topics = detect_corpus_concepts(corpus, topic_taxonomy)
+    doc_topics = map(lambda x: reduce(list.__add__, x) if x else [],
+                     sent_topics)
+    # Get ranked total weighted topic counts for each document
+    total_doc_topics = map(combine_weights, doc_topics)
+    par_sort = partial(sorted, key=lambda x: x[1], reverse=True)
+    ranked_doc_topics = map(par_sort, total_doc_topics)
     # Get topic proportions for each document
-    topic_freq = [[round(100 * detected.count(topic)/float(len(detected)), 1)
-                   if len(detected) is not 0
-                   else 0 for topic in topic_taxonomy]
-                  for detected in detected_topics]
-    write_topic_results(topic_freq, topic_taxonomy)
-    return detected_topics, topic_freq, topic_taxonomy
+    topic_freq = []
+    for ranked_doc in ranked_doc_topics:
+        if ranked_doc:
+            total = sum(map(lambda x: x[1], ranked_doc))
+            freq = []
+            for topic in ranked_doc:
+                percentage = round(100.0 * topic[1]/total, 1)
+                freq.append((topic[0], percentage))
+            topic_freq.append(freq)
+        else:
+            topic_freq.append([])
+    write_topic_results(ranked_doc_topics, topic_freq)
+    return ranked_doc_topics, topic_freq
 
 
-def write_topic_results(topic_freq, topic_taxonomy):
-    # Write per-document topic distributions for each document in csv format
-    topics_list = [topic for topic in topic_taxonomy]
-    n_topics = len(topics_list)
-    with open('../work/manual_per-document_topic_distributions.csv', 'w') as f:
-        f.write('ID,' + ','.join(topics_list) + '\n')
-        for i, distribution in enumerate(topic_freq):
-            line = '{:>5},'*(n_topics+1) + '\n'
-            f.write(line.format(i, *topic_freq[i]))
-    # Write topics in frequency order (except if freq = 0) only for documents
-    # with detected topics
-    with open('../work/manual_document_ranked_topics.csv', 'w') as f:
-        f.write('ID, TOPICS\n')
-        for i, distribution in enumerate(topic_freq):
-            if sum(distribution) is not 0:
-                dist = [x for x in zip(topics_list, distribution)
-                        if x[1] != 0.0]
-                ranked_topics = sorted(dist, key=lambda t: t[1], reverse=True)
-                ranked_labels = [x[0] for x in ranked_topics]
-                ranked_freq = [x[1] for x in ranked_topics]
-                line = '{:>7}' + ',{:>30}'*len(ranked_topics) + '\n'
-                f.write(line.format(i, *ranked_labels))
-                f.write(line.format('', *ranked_freq))
-    # Write top 3 topics in frequency order (except if freq = 0) only for
-    # documents with detected topics
-    with open('../work/manual_document_ranked_top_3_topics.csv', 'w') as f:
-        f.write('ID, TOP 3 TOPICS\n')
-        for i, distribution in enumerate(topic_freq):
+def write_topic_results(ranked_doc_topics, topic_freq):
+    # Write top 3 topics with their weighted counts
+    max_n = 3
+    top_3_counts_file = '../work/manual_top_3_topic_counts.tsv'
+    with open(top_3_counts_file, 'w') as f:
+        f.write('ID\tTOP 3 TOPICS\n')
+        for i, ranked_topics in enumerate(ranked_doc_topics):
+            n = min(max_n, len(ranked_topics))
             line = '{},'.format(i)
-            if sum(distribution) is not 0:
-                dist = [x for x in zip(topics_list, distribution)
-                        if x[1] != 0.0]
-                ranked_topics = sorted(dist, key=lambda t: t[1], reverse=True)
-                for j in range(min(len(ranked_topics), 3)):
-                    line += '{}({}%) '.format(*ranked_topics[j])
-            f.write(line + '\n')
+            for j in range(n):
+                line += ' {}({})'.format(*ranked_topics[j])
+            line += '\n'
+            f.write(line)
+        print 'Wrote to ' + top_3_counts_file
+    # Write top 3 topics with their frequency based on weighted counts
+    top_3_freqs_file = '../work/manual_top_3_topic_freqs.tsv'
+    with open(top_3_freqs_file, 'w') as f:
+        f.write('ID\tTOP 3 TOPICS\n')
+        for i, ranked_topics in enumerate(topic_freq):
+            n = min(max_n, len(ranked_topics))
+            line = '{},'.format(i)
+            for j in range(n):
+                line += ' {}({}%)'.format(*ranked_topics[j])
+            line += '\n'
+            f.write(line)
+        print 'Wrote to ' + top_3_freqs_file
 
 
 def main():
     enb_file = '../enb/sw_enb_reports.csv'
+    swa_file = '../sciencewise/scientific_articles_100.pickle'
     concepts_file = '../knowledge_base/manual_concept_vectors.csv'
     topics_file = '../knowledge_base/manual_topic_vectors.csv'
     issues_file = '../knowledge_base/manual_issues.csv'
 
-    output = get_concept_occurrences(enb_file, concepts_file)
-    output = get_topic_distributions(enb_file, topics_file)
+    output = get_concept_occurrences(swa_file, concepts_file)
+    output = get_topic_distributions(swa_file, topics_file)
 
     with open(issues_file, 'r') as f:
         data = csv.reader(f, delimiter=',')
         issues = [tuple(row) for row in data]
 
 
-
-
+if __name__ == '__main__':
+    main()
