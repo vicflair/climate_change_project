@@ -238,19 +238,19 @@ def detect_sent_concept_pairs(doc):
     for sent in doc:
         # Get only valid issue concept pairs
         combos = valid_pairs(sent)
-
-        # Get n! pairs for all unique concepts if more than 2 concepts
-        combos = list(combinations(sent, 2))
-        # Transform concept combos representation from ((x, w), (y, w)) to the
-        # ((x, y), w) pair form, where x,y are concepts, and w is the weight
-        pairs = []
-        for combo in combos:
-            # Sort pair so that (x,y) and (y,x) are a single form: (x,y)
-            sorted_pair = tuple({combo[0][0], combo[1][0]})
-            weight = combo[0][1]
-            pair = (sorted_pair, weight)
-            pairs.append(pair)
-        sent_pairs.append(pairs)
+        sent_pairs.append(combos)
+        # # Get n! pairs for all unique concepts if more than 2 concepts
+        # combos = list(combinations(sent, 2))
+        # # Transform concept combos representation from ((x, w), (y, w)) to the
+        # # ((x, y), w) pair form, where x,y are concepts, and w is the weight
+        # pairs = []
+        # for combo in combos:
+        #     # Sort pair so that (x,y) and (y,x) are a single form: (x,y)
+        #     sorted_pair = tuple({combo[0][0], combo[1][0]})
+        #     weight = combo[0][1]
+        #     pair = (sorted_pair, weight)
+        #     pairs.append(pair)
+        # sent_pairs.append(pairs)
     if sent_pairs:
         sent_pairs = list(reduce(list.__add__, sent_pairs))
     # Combine weights of all instances of the same concept pair
