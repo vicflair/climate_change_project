@@ -22,16 +22,13 @@ def regex_search(term):
     return search_term
 
 
-def capitalize_text(text, taxonomy, marker=''):
+def capitalize_text(text, words_list, marker=''):
     """ Capitalize and mark, i.e. surround with special characters as
     identifiers, all taxonomic terms in a text, using a regular expressions for
     search.
     """
-    terms = []
-    for concept in taxonomy:
-        terms += taxonomy[concept]
-    for term in terms:
-        text = capitalize_term_re(text, term, marker)
+    for word in words_list:
+        text = capitalize_term_re(text, word, marker)
     return text
 
 
@@ -51,17 +48,21 @@ def capitalize_term_re(text, term, marker=''):
 
 def write_annotated_docs(doc_file, concepts_file, topics_file,
                          marker=''):
+    # FIXME: some terms are over marked, ****** instead of just ***
     # Capitalize taxonomic concept occurrences in original texts
     concept_taxonomy = load_taxonomy(concepts_file)
     topic_taxonomy = load_taxonomy(topics_file)
     with open(doc_file, 'r') as f:
         data = csv.reader(f, delimiter='\t')
         docs = [row[7] for row in data]
-    cap_concepts = partial(capitalize_text, taxonomy=concept_taxonomy,
+    topics = reduce(list.__add__, [topic_taxonomy[topic]
+                                   for topic in topic_taxonomy])
+    concepts = reduce(list.__add__, [concept_taxonomy[concept]
+                                     for concept in concept_taxonomy])
+    all_key_words = list(set(topics + concepts))
+    cap_words = partial(capitalize_text, words_list=all_key_words,
                            marker=marker)
-    annotated_docs = map(cap_concepts, docs)
-    cap_topics = partial(capitalize_text, taxonomy=topic_taxonomy, marker=marker)
-    annotated_docs = map(cap_topics, annotated_docs)
+    annotated_docs = map(cap_words, docs)
     # Write to file
     with open('../work/annotated_docs.tsv', 'w') as f:
         f.write('ID#\tANNOTATED TEXT\n')
@@ -90,7 +91,7 @@ def load_taxonomy(filename):
     for concept in concepts:
         concept_name = concept[0].replace(' ', '_')
         terms = map(lambda s: s.lower().replace(' ', '_'), concept)
-        taxonomy[concept_name] = terms
+        taxonomy[concept_name] = list(set(terms))
     return taxonomy
 
 
@@ -206,12 +207,38 @@ def combine_weights(uncombined_items):
     return combined_items
 
 
+def valid_pairs(sent):
+    valid_concept_pairs = []
+    concepts = [weighted_concept[0] for weighted_concept in sent]
+    score = [weighted_concept[1] for weighted_concept in sent][0]
+    valid_issues = [
+        ['climate_change', 'species_extinction'],
+        ['climate_change', 'sea_level_rise'],
+        ['climate_change', 'poverty'],
+        ['climate_change', 'weather_extremes'],
+        ['GHG_emissions', 'climate_change'],
+        ['fossil_fuels', 'GHG_emissions'],
+        ['deforestation', 'GHG_emissions'],
+        ['transportation', 'GHG_emissions'],
+        ['Clean_Development_Mechanism', 'GHG_emissions'],
+        ['compliance_enforcement', 'GHG_emissions']
+    ]
+    for issue in valid_issues:
+        if set(issue).issubset(concepts):
+            valid_concept_pair = [(issue[0], issue[1]), score]
+            valid_concept_pairs.append(valid_concept_pair)
+    return valid_concept_pairs
+
+
 def detect_sent_concept_pairs(doc):
     """ Given the set of detected concepts in a document's sentences,
     determine all sentence-specific concept pairs.
     """
     sent_pairs = []
     for sent in doc:
+        # Get only valid issue concept pairs
+        combos = valid_pairs(sent)
+
         # Get n! pairs for all unique concepts if more than 2 concepts
         combos = list(combinations(sent, 2))
         # Transform concept combos representation from ((x, w), (y, w)) to the
@@ -451,8 +478,13 @@ def main():
     topics_file = '../knowledge_base/manual_topic_vectors.csv'
     issues_file = '../knowledge_base/manual_issues.csv'
 
+    start = time.time()
     output = get_concept_occurrences(enb_file, concepts_file)
-    output = get_topic_distributions(enb_file, topics_file)
+    print time.time() - start
+
+    start = time.time()
+    output = get_topic_distributions(enb_file, concepts_file)
+    print time.time() - start
 
     with open(issues_file, 'r') as f:
         data = csv.reader(f, delimiter=',')
