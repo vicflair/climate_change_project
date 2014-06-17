@@ -1,4 +1,5 @@
 import csv
+import json
 import pickle
 import re
 import sys
@@ -260,6 +261,16 @@ def get_concept_occurrences(corpus_file, concepts_file):
         pair_matrix.append(row)
     # Write results
     write_concept_results(doc_pairs, pair_matrix, concept_taxonomy)
+    # Save results
+    with open('../work/doc_pairs.pickle', 'w') as f:
+        pickle.dump(doc_pairs, f)
+    # Save results
+    with open('../work/pair_matrix.pickle', 'w') as f:
+        pickle.dump(pair_matrix, f)
+    # Save results
+    with open('../work/concept_taxonomy.pickle', 'w') as f:
+        pickle.dump(concept_taxonomy, f)
+
     return doc_pairs, pair_matrix
 
 
@@ -310,7 +321,13 @@ def get_topic_distributions(corpus_file, topics_file):
             topic_freq.append(freq)
         else:
             topic_freq.append([])
+    # Write results
     write_topic_results(ranked_doc_topics, topic_freq)
+    # Save results to pickle
+    with open('../work/ranked_doc_topics.pickle', 'w') as f:
+        pickle.dump(ranked_doc_topics, f)
+    with open('../work/topic_freq.pickle', 'w') as f:
+        pickle.dump(topic_freq, f)
     return ranked_doc_topics, topic_freq
 
 
@@ -322,7 +339,7 @@ def write_topic_results(ranked_doc_topics, topic_freq):
         f.write('ID\tTOP 3 TOPICS\n')
         for i, ranked_topics in enumerate(ranked_doc_topics):
             n = min(max_n, len(ranked_topics))
-            line = '{},'.format(i)
+            line = '{}\t'.format(i)
             for j in range(n):
                 line += ' {}({})'.format(*ranked_topics[j])
             line += '\n'
@@ -334,12 +351,97 @@ def write_topic_results(ranked_doc_topics, topic_freq):
         f.write('ID\tTOP 3 TOPICS\n')
         for i, ranked_topics in enumerate(topic_freq):
             n = min(max_n, len(ranked_topics))
-            line = '{},'.format(i)
+            line = '{}\t'.format(i)
             for j in range(n):
                 line += ' {}({}%)'.format(*ranked_topics[j])
             line += '\n'
             f.write(line)
         print 'Wrote to ' + top_3_freqs_file
+
+
+def write_json(tsv_file):
+    # TODO: write a function to combine results data structures so that we
+    # don't need to read from TSV
+    # Fields to parse and expand, known a priori
+    counts = 'TOP 3 TOPICS (WEIGHTED COUNTS)'
+    freqs = 'TOP 3 TOPICS (WEIGHTED FREQUENCY)'
+    pairs = 'CONCEPT PAIRS'
+    # Split pattern for concept pairs: split on space, if between ) and (
+    regex_pair = re.compile(('(?<=\)) (?=\()'))
+    # Split pattern for each item (concept 1, concept 2, #) in pair
+    regex_items = re.compile('([\w_]+)[^\w]+([\w_]+)[^\d]+([\d]+)')
+    # split pattern for topic counts and freqs
+    regex_counts = re.compile('([\w]+)\(([\d]+)')
+    # Load TSV file as dict
+    with open(tsv_file, 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        data = [row for row in reader]
+    # Parse and expand topics and concepts as a list
+    for i, datum in enumerate(data):
+        # TODO: find out why ID is sometime missing?
+        # Turn ID to int from string, sometimes ID is missing
+        if data[i]['ID#']:
+            data[i]['ID#'] = int(data[i]['ID#'])
+        else:
+            data[i]['ID#'] = i
+        # parse topic counts
+        topic_counts = datum[counts].split()
+        data[i][counts] = {}
+        for t_count in topic_counts:
+            items = re.search(regex_counts, t_count)
+            topic = items.groups()[0]
+            # TODO: Account for TSV reading error
+            if topic == '_Adaptation':
+                topic = 'Vulnerability_&_Adaptation'
+            topic_count = int(items.groups()[1])
+            data[i][counts][topic] = topic_count
+        # parse topic frequencies
+        topic_freqs = datum[freqs].split()
+        data[i][freqs] = {}
+        for t_freq in topic_freqs:
+            items = re.search(regex_counts, t_freq)
+            topic = items.groups()[0]
+            # TODO: Account for TSV reading error
+            if topic == '_Adaptation':
+                topic = 'Vulnerability_&_Adaptation'
+            topic_freq = int(items.groups()[1])
+            data[i][freqs][topic] = topic_freq
+        # if pairs exist, parse separate concept pairs
+        if datum[pairs]:
+            concept_pairs = re.split(regex_pair, datum[pairs])
+            data[i][pairs] = []
+        else:
+            concept_pairs = []
+        for c_pair in concept_pairs:
+            # TODO: Find source of "self-pair" error
+            # if erroneous "self-pair", e.g. "(('GHG_emissions', ), 2)", OMIT!
+            if '\',)' in c_pair:
+                pass
+            # if not, go ahead and parse
+            else:
+                # parse, reorder, & replace in results data structure
+                items = re.search(regex_items, c_pair)
+                weighted_count = int(items.groups()[2])
+                concept1 = items.groups()[0]
+                concept2 = items.groups()[1]
+                new_pair = [weighted_count, concept1, concept2]
+                data[i][pairs].append(new_pair)
+        # if applicable, sort
+        data[i][pairs] = sorted(data[i][pairs], key=lambda x: x[0],
+                                reverse=True)
+    # Save updated JSON data in indented form
+    json_out_file = '../work/manual_detection_INDENT.json'
+    with open(json_out_file, 'w') as f:
+        json.dump(data, f, indent=4)
+        print 'Wrote to ' + json_out_file
+    json_out_file = '../work/manual_detection_LINE.json'
+    with open(json_out_file, 'w') as f:
+        f.write('[\n')
+        for datum in data:
+            json.dump(datum, f)
+            f.write(',\n')
+        f.write(']')
+        print 'Wrote to ' + json_out_file
 
 
 def main():
@@ -349,8 +451,8 @@ def main():
     topics_file = '../knowledge_base/manual_topic_vectors.csv'
     issues_file = '../knowledge_base/manual_issues.csv'
 
-    output = get_concept_occurrences(swa_file, concepts_file)
-    output = get_topic_distributions(swa_file, topics_file)
+    output = get_concept_occurrences(enb_file, concepts_file)
+    output = get_topic_distributions(enb_file, topics_file)
 
     with open(issues_file, 'r') as f:
         data = csv.reader(f, delimiter=',')
