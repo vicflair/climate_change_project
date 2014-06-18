@@ -471,6 +471,26 @@ def write_json(tsv_file):
         print 'Wrote to ' + json_out_file
 
 
+def fast_manual_detection():
+    # TODO: faster manual detection for scientific aticles
+    # Data file locations
+    concepts_file = '../knowledge_base/manual_concept_vectors.csv'
+    topics_file = '../knowledge_base/manual_topic_vectors.csv'
+    issues_file = '../knowledge_base/manual_issues.csv'
+    doc_file = '../sciencewise/scientific_articles_100.pickle'
+    # Load data
+    c_tax = load_taxonomy(concepts_file)
+    t_tax = load_taxonomy(topics_file)
+    docs = load_corpus(doc_file)
+
+    # Split into sections
+
+    sections = map(find_sections, docs)
+
+    # Keep only word, digit, or period characters
+    docs = map(lambda x: re.sub('[^\w\d\.]+', ' ', x), docs)
+
+
 def main():
     enb_file = '../enb/sw_enb_reports.csv'
     swa_file = '../sciencewise/scientific_articles_100.pickle'
