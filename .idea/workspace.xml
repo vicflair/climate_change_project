@@ -27,9 +27,7 @@
         <entry file="file://$PROJECT_DIR$/manual_detection.py">
           <provider selected="true" editor-type-id="text-editor">
             <state line="491" column="0" selection-start="18821" selection-end="18821" vertical-scroll-proportion="0.0" vertical-offset="8302" max-vertical-offset="9378">
-              <folding>
-                <element signature="e#0#10#0" expanded="true" />
-              </folding>
+              <folding />
             </state>
           </provider>
         </entry>
@@ -46,7 +44,7 @@
       <file leaf-file-name="dependency_parsing.py" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/dependency_parsing.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="6" column="0" selection-start="142" selection-end="560" vertical-scroll-proportion="0.105675146" vertical-offset="0" max-vertical-offset="1404">
+            <state line="6" column="0" selection-start="142" selection-end="560" vertical-scroll-proportion="0.0" vertical-offset="108" max-vertical-offset="1404">
               <folding />
             </state>
           </provider>
@@ -55,7 +53,7 @@
       <file leaf-file-name="ahocorasick.py" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/ahocorasick.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="18" column="23" selection-start="489" selection-end="489" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="5994">
+            <state line="18" column="23" selection-start="489" selection-end="489" vertical-scroll-proportion="0.0" vertical-offset="324" max-vertical-offset="6012">
               <folding />
             </state>
           </provider>
@@ -88,7 +86,7 @@
   <component name="ProjectFrameBounds">
     <option name="x" value="1" />
     <option name="y" value="52" />
-    <option name="width" value="960" />
+    <option name="width" value="950" />
     <option name="height" value="1148" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="false">
@@ -376,8 +374,8 @@
     </todo-panel>
   </component>
   <component name="ToolWindowManager">
-    <frame x="1" y="52" width="960" height="1148" extended-state="4" />
-    <editor active="true" />
+    <frame x="1" y="52" width="950" height="1148" extended-state="4" />
+    <editor active="false" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.22528517" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -391,11 +389,11 @@
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
+      <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
       <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
+      <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
     </layout>
   </component>
   <component name="Vcs.Log.UiProperties">
@@ -420,9 +418,7 @@
     <entry file="file://$PROJECT_DIR$/manual_detection.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="182" column="59" selection-start="7930" selection-end="7930" vertical-scroll-proportion="0.0" vertical-offset="2621" max-vertical-offset="3834">
-          <folding>
-            <element signature="e#0#10#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
@@ -449,9 +445,7 @@
     <entry file="file://$PROJECT_DIR$/manual_detection.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="75" column="63" selection-start="2749" selection-end="2749" vertical-scroll-proportion="0.0" vertical-offset="1350" max-vertical-offset="3042">
-          <folding>
-            <element signature="e#0#10#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
@@ -478,9 +472,7 @@
     <entry file="file://$PROJECT_DIR$/manual_detection.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="136" column="0" selection-start="6063" selection-end="6063" vertical-scroll-proportion="0.0" vertical-offset="2448" max-vertical-offset="2700">
-          <folding>
-            <element signature="e#0#10#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
@@ -661,9 +653,7 @@
     </entry>
     <entry file="file:///usr/lib/python2.7/re.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="324" column="0" selection-start="12959" selection-end="12959" vertical-scroll-proportion="0.84767276" vertical-offset="5195" max-vertical-offset="5904">
-          <folding />
-        </state>
+        <state line="324" column="0" selection-start="12959" selection-end="12959" vertical-scroll-proportion="0.84767276" vertical-offset="5195" max-vertical-offset="5904" />
       </provider>
     </entry>
     <entry file="file://$USER_HOME$/.PyCharm30/system/python_stubs/-1247972723/__builtin__.py">
@@ -673,25 +663,23 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/ahocorasick.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="18" column="23" selection-start="489" selection-end="489" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="5994">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/manual_detection.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="491" column="0" selection-start="18821" selection-end="18821" vertical-scroll-proportion="0.0" vertical-offset="8302" max-vertical-offset="9378">
-          <folding>
-            <element signature="e#0#10#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/dependency_parsing.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="6" column="0" selection-start="142" selection-end="560" vertical-scroll-proportion="0.105675146" vertical-offset="0" max-vertical-offset="1404">
+        <state line="6" column="0" selection-start="142" selection-end="560" vertical-scroll-proportion="0.0" vertical-offset="108" max-vertical-offset="1404">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/ahocorasick.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="18" column="23" selection-start="489" selection-end="489" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="5994">
           <folding />
         </state>
       </provider>
