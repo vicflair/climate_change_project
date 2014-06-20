@@ -17,7 +17,7 @@ csv.field_size_limit(sys.maxsize)
 def regex_search(term):
     # Search term is taxonomic term without underscores, optionally with a
     # terminal 's' (for plurals), and is case insensitive
-    search_term = re.compile(r'(\b)' + term.replace('_', ' ') + r'(\b|s\b)',
+    search_term = re.compile(r'(\b)(' + term + r')(\b|s\b)',
                              re.I)
     return search_term
 
@@ -37,11 +37,11 @@ def capitalize_term_re(text, term, marker=''):
     'flower' and marker = '$', then:
     'Roses are the best flowers.' --> 'Roses are the best $FLOWERS$s.'
     """
-    # TODO: Copy this search method to concept/topic detectoin functions
+    # TODO: Copy this search method to concept/topic detection functions
     assert type(marker) is str
     search_term = regex_search(term)
     # Marked term is capitalized taxonomic term with 's' afterwards if plural
-    marked_term = r'\1' + marker + term.upper() + marker + r'\2'
+    marked_term = r'\1' + marker + term.upper() + marker + r'\3'
     annotated_text = re.sub(search_term, marked_term, text)
     return annotated_text
 
@@ -50,15 +50,9 @@ def write_annotated_docs(doc_file, concepts_file, topics_file,
                          marker=''):
     # FIXME: some terms are over marked, ****** instead of just ***
     # Capitalize taxonomic concept occurrences in original texts
-    concept_taxonomy = load_taxonomy(concepts_file)
-    topic_taxonomy = load_taxonomy(topics_file)
-    with open(doc_file, 'r') as f:
-        data = csv.reader(f, delimiter='\t')
-        docs = [row[7] for row in data]
-    topics = reduce(list.__add__, [topic_taxonomy[topic]
-                                   for topic in topic_taxonomy])
-    concepts = reduce(list.__add__, [concept_taxonomy[concept]
-                                     for concept in concept_taxonomy])
+    concept_taxonomy, concepts = load_taxonomy(concepts_file)
+    topic_taxonomy, topics = load_taxonomy(topics_file)
+    docs = load_corpus(doc_file, topics + concepts)
     all_key_words = list(set(topics + concepts))
     cap_words = partial(capitalize_text, words_list=all_key_words,
                            marker=marker)
@@ -71,7 +65,8 @@ def write_annotated_docs(doc_file, concepts_file, topics_file,
     return annotated_docs
 
 
-def load_corpus(filename):
+def load_corpus(filename, ngrams):
+    # Load original text
     if filename.endswith('.csv'):
         with open(filename, 'r') as f:
             data = csv.reader(f, delimiter='\t')
@@ -79,7 +74,15 @@ def load_corpus(filename):
     elif filename.endswith('.pickle'):
         with open(filename, 'r') as f:
             corpus = pickle.load(f)
-    return corpus
+    # Form n-grams
+    ngram_corpus = []
+    for doc in corpus:
+        for ngram in ngrams:
+            search_term = regex_search(ngram.replace('_', ' '))
+            replace_term = r'\1' + ngram + r'\3'
+            doc = re.sub(search_term, replace_term, doc)
+        ngram_corpus.append(doc)
+    return ngram_corpus
 
 
 def load_taxonomy(filename):
@@ -92,7 +95,9 @@ def load_taxonomy(filename):
         concept_name = concept[0].replace(' ', '_')
         terms = map(lambda s: s.lower().replace(' ', '_'), concept)
         taxonomy[concept_name] = list(set(terms))
-    return taxonomy
+    all_terms = reduce(list.__add__, [taxonomy[concept]
+                                      for concept in taxonomy])
+    return taxonomy, all_terms
 
 
 def get_weight(sections, term_pos):
@@ -143,7 +148,7 @@ def find_sections(doc):
     return sections
 
 
-def detect_sent_concepts(doc, taxonomy):
+def detect_sent_concepts(doc, taxonomy, multi=False):
     # Get section header locations
     sections = find_sections(doc)
     # Build list of all taxonomic terms
@@ -162,23 +167,33 @@ def detect_sent_concepts(doc, taxonomy):
                 # Assume only one match is valid per sentence.
                 term_pos = match_pos[0] + doc_pos
                 concept = term_to_concept(term, taxonomy)
-                weight = get_weight(sections, term_pos)
+                # Optionally multiply weight by # of occurrences in sentence
+                if multi:
+                    count = len(match_pos)
+                    weight = count * get_weight(sections, term_pos)
+                else:
+                    weight = get_weight(sections, term_pos)
                 sent_concepts.append((concept, weight))
-        # Add tuple of unique concepts, i.e. no repeats even if different terms
-        # referring to the same concept appear
+        # Add tuple of concepts
         if sent_concepts:
-            doc_concepts.append(list(set(sent_concepts)))
+            # If multi, concepts counted multiple times
+            if multi:
+                doc_concepts.append(sent_concepts)
+            # Else, i.e. no repeats even if different terms referring to the
+            # same concept appear (only if multi == False)
+            else:
+                doc_concepts.append(list(set(sent_concepts)))
         # Increment document position after processing each sentence
         doc_pos += len(sent)
     return doc_concepts
 
 
-def detect_corpus_concepts(corpus, taxonomy):
+def detect_corpus_concepts(corpus, taxonomy, multi=False):
     """ Get corpus which is nested list of concepts, representing documents
     and sentences.
     """
     # Sanitize
-    par_detect = partial(detect_sent_concepts, taxonomy=taxonomy)
+    par_detect = partial(detect_sent_concepts, taxonomy=taxonomy, multi=multi)
     p = Pool(4)
     corpus_concepts = p.map(par_detect, corpus)
     p.close()
@@ -262,8 +277,8 @@ def get_concept_occurrences(corpus_file, concepts_file):
     """ Manual concept vector detection
     """
     # Load corpus and concept vectors
-    concept_taxonomy = load_taxonomy(concepts_file)
-    corpus = load_corpus(corpus_file)
+    concept_taxonomy, concepts = load_taxonomy(concepts_file)
+    corpus = load_corpus(corpus_file, concepts)
     # Process corpus and return only concept terms on a per-document-sentence
     # level
     doc_concepts = detect_corpus_concepts(corpus, concept_taxonomy)
@@ -327,9 +342,9 @@ def get_topic_distributions(corpus_file, topics_file):
     """ Manual topic vector detection
     """
     # Get topic vectors and corpus
-    topic_taxonomy = load_taxonomy(topics_file)
-    corpus = load_corpus(corpus_file)
-    sent_topics = detect_corpus_concepts(corpus, topic_taxonomy)
+    topic_taxonomy, topics = load_taxonomy(topics_file)
+    corpus = load_corpus(corpus_file, topics)
+    sent_topics = detect_corpus_concepts(corpus, topic_taxonomy, multi=True)
     doc_topics = map(lambda x: reduce(list.__add__, x) if x else [],
                      sent_topics)
     # Get ranked total weighted topic counts for each document
@@ -384,6 +399,31 @@ def write_topic_results(ranked_doc_topics, topic_freq):
             line += '\n'
             f.write(line)
         print 'Wrote to ' + top_3_freqs_file
+
+
+def write_combined_results(text_file, url_file, pairs_file, topics_file):
+    # Load data
+    with open(text_file, 'r') as f:
+        data = csv.reader(f, delimiter='\t')
+        rows = [row for row in data]
+        ids = [row[0] for row in rows]
+        texts = [row[1] for row in rows]
+    with open(url_file, 'r') as f:
+        data = csv.reader(f, delimiter='\t')
+        urls = [row[1] for row in data]
+    with open(pairs_file, 'r') as f:
+        data = csv.reader(f, delimiter='\t')
+        pairs = [row[1] for row in data]
+    with open(topics_file, 'r') as f:
+        data = csv.reader(f, delimiter='\t')
+        topics = [row[1] for row in data]
+    with open('../work/combined_results.tsv', 'w') as f:
+        print 'start writing'
+        for data in zip(ids, texts, urls, pairs, topics):
+            line = '{0}\t{1}\t{2}\t{3}\t{4}\n'
+            line = line.format(*data)
+            f.write(line)
+        print 'Wrote to ../work/combined_results.tsv'
 
 
 def write_json(tsv_file):
@@ -493,18 +533,40 @@ def fast_manual_detection():
 
 def main():
     enb_file = '../enb/sw_enb_reports.csv'
-    swa_file = '../sciencewise/scientific_articles_100.pickle'
+    swa_file = '../sciencewise/scientific_articles_21k.pickle'
     concepts_file = '../knowledge_base/manual_concept_vectors.csv'
     topics_file = '../knowledge_base/manual_topic_vectors.csv'
     issues_file = '../knowledge_base/manual_issues.csv'
 
+    topic_taxonomy, topics = load_taxonomy(topics_file)
+    enb = load_corpus(enb_file, topics)
+
+    with open('../work/dummy.tsv', 'w') as f:
+        f.write('ID#\tDUMMY\n')
+        for i in range(len(enb)):
+            line = '{0}\t{1}\n'.format(i, '')
+            f.write(line)
+
+    f1 = '../work/annotated_docs.tsv'
+    f2 = '../work/dummy.tsv'
+    f3 = '../work/manual_concept_pairs_per_doc.tsv'
+    f4 = '../work/manual_top_3_topic_counts.tsv'
+
+
     start = time.time()
-    output = get_concept_occurrences(enb_file, concepts_file)
+    doc_pairs, pair_matrix = get_concept_occurrences(swa_file, concepts_file)
     print time.time() - start
 
     start = time.time()
-    output = get_topic_distributions(enb_file, concepts_file)
+    doc_topics, topic_freq = get_topic_distributions(swa_file, topics_file)
     print time.time() - start
+
+    start = time.time()
+    anno = write_annotated_docs(swa_file, concepts_file, topics_file,
+                                marker='***')
+    print time.time() - start
+
+    write_combined_results(f1, f2, f3, f4)
 
     with open(issues_file, 'r') as f:
         data = csv.reader(f, delimiter=',')

@@ -1,5 +1,6 @@
 import re
 
+
 def parse_dirt():
     dirt_file = '../knowledge_base/simPath.lsp'
     with open(dirt_file, 'r') as f:
@@ -17,12 +18,22 @@ def parse_dirt():
             paraphrase = data[0]
             score = float(data[1])
             paraphrases[current_relation].append((paraphrase, score))
-    return dirt
+    return paraphrases
+
+
+def main_relations():
+    relations = {}
+    relations['cause'] = 'N:subj:V<cause>V:obj:N'
+    relations['decrease'] = 'N:subj:V<decrease>V:obj:N'
+    relations['increase'] = 'N:subj:V<increase>V:obj:N'
+    relations['reduce'] = 'N:subj:V<reduce>V:obj:N'
+    relations['leadto'] = 'N:subj:V<leadto>V:obj:N'
+    return relations
 
 
 class DepRel:
 
-    def __init__(self):
+    def __init__(self, r=True, h='', m=[]):
         self.root = True
         self.head = ''
         self.modifiers = []
@@ -69,5 +80,5 @@ verb.add_modifier(obj)
 
 # Test
 verb.declare()
-for m in verb.modifiers:
-    print m.root
+subj.declare()
+obj.declare()
