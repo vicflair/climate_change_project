@@ -74,6 +74,9 @@ def load_corpus(filename, ngrams):
     elif filename.endswith('.pickle'):
         with open(filename, 'r') as f:
             corpus = pickle.load(f)
+    # Sort n-grams by length, so we take the longest possible n-grams where
+    # they occur
+    ngrams = sorted(ngrams, key=lambda x:len(x), reverse=True)
     # Form n-grams
     ngram_corpus = []
     for doc in corpus:
@@ -430,8 +433,7 @@ def write_json(tsv_file):
     # TODO: write a function to combine results data structures so that we
     # don't need to read from TSV
     # Fields to parse and expand, known a priori
-    counts = 'TOP 3 TOPICS (WEIGHTED COUNTS)'
-    freqs = 'TOP 3 TOPICS (WEIGHTED FREQUENCY)'
+    counts = 'TOP 3 TOPICS'
     pairs = 'CONCEPT PAIRS'
     # Split pattern for concept pairs: split on space, if between ) and (
     regex_pair = re.compile(('(?<=\)) (?=\()'))
@@ -462,17 +464,6 @@ def write_json(tsv_file):
                 topic = 'Vulnerability_&_Adaptation'
             topic_count = int(items.groups()[1])
             data[i][counts][topic] = topic_count
-        # parse topic frequencies
-        topic_freqs = datum[freqs].split()
-        data[i][freqs] = {}
-        for t_freq in topic_freqs:
-            items = re.search(regex_counts, t_freq)
-            topic = items.groups()[0]
-            # TODO: Account for TSV reading error
-            if topic == '_Adaptation':
-                topic = 'Vulnerability_&_Adaptation'
-            topic_freq = int(items.groups()[1])
-            data[i][freqs][topic] = topic_freq
         # if pairs exist, parse separate concept pairs
         if datum[pairs]:
             concept_pairs = re.split(regex_pair, datum[pairs])
