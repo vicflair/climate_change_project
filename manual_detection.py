@@ -4,7 +4,6 @@ import pickle
 import re
 import sys
 import time
-from itertools import combinations
 from multiprocessing import Pool
 from functools import partial
 from nltk.tokenize import sent_tokenize
@@ -37,7 +36,6 @@ def capitalize_term_re(text, term, marker=''):
     'flower' and marker = '$', then:
     'Roses are the best flowers.' --> 'Roses are the best $FLOWERS$s.'
     """
-    # TODO: Copy this search method to concept/topic detection functions
     assert type(marker) is str
     search_term = regex_search(term)
     # Marked term is capitalized taxonomic term with 's' afterwards if plural
@@ -48,7 +46,6 @@ def capitalize_term_re(text, term, marker=''):
 
 def write_annotated_docs(doc_file, concepts_file, topics_file,
                          marker=''):
-    # FIXME: some terms are over marked, ****** instead of just ***
     # Capitalize taxonomic concept occurrences in original texts
     concept_taxonomy, concepts = load_taxonomy(concepts_file)
     topic_taxonomy, topics = load_taxonomy(topics_file)
